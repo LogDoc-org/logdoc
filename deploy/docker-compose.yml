@@ -1,0 +1,44 @@
+# Полный стек LogDoc v2: docker compose -f deploy/docker-compose.yml up
+# Цель S1: от `up` до первого лога — меньше 5 минут.
+name: logdoc
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    environment:
+      CLICKHOUSE_DB: logdoc
+      CLICKHOUSE_USER: default
+      # Пароль обязателен: с пустым паролем entrypoint ClickHouse ограничивает
+      # пользователя default до localhost, и logdoc-контейнер не подключится.
+      CLICKHOUSE_PASSWORD: logdoc
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--password", "logdoc", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  logdoc:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: logdoc/logdoc:dev
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      LOGDOC_CLICKHOUSE_ADDR: clickhouse:9000
+      LOGDOC_CLICKHOUSE_PASSWORD: logdoc
+      # LOGDOC_API_KEY: поставь свой ключ для не-dev окружений
+    ports:
+      - "9001:9001"        # API + UI
+      - "9999:9999/tcp"    # native ld_format
+      - "9999:9999/udp"
+
+volumes:
+  clickhouse-data:

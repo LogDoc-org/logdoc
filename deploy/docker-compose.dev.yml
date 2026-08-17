@@ -1,0 +1,28 @@
+name: logdoc-dev
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    container_name: logdoc-clickhouse
+    ports:
+      - "8124:8123"   # HTTP (8123 на хосте часто занят другими CH)
+      - "9010:9000"   # native
+    environment:
+      CLICKHOUSE_DB: logdoc
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  clickhouse-data:
