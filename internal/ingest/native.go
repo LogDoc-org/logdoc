@@ -82,7 +82,7 @@ func (s *NativeServer) acceptLoop() {
 
 func (s *NativeServer) handleConn(conn net.Conn) {
 	defer s.wg.Done()
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	remoteIP := hostOnly(conn.RemoteAddr())
 	r := bufio.NewReaderSize(conn, 64<<10)

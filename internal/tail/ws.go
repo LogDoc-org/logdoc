@@ -27,7 +27,7 @@ func NewWSHandler(hub *Hub) http.Handler {
 			slog.Warn("tail: websocket accept", "err", err)
 			return
 		}
-		defer conn.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 		entries, cancel := hub.Subscribe(plan)
 		defer cancel()

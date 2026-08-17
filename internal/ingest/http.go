@@ -81,7 +81,7 @@ func NewHTTPHandler(app Appender, maxBodyBytes int64) http.Handler {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		fmt.Fprintf(w, `{"accepted":%d}`, len(entries))
+		_, _ = fmt.Fprintf(w, `{"accepted":%d}`, len(entries))
 	})
 }
 

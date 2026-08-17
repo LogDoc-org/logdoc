@@ -77,7 +77,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	logger.Info("clickhouse connected", "addr", cfg.ClickHouse.Addr, "db", cfg.ClickHouse.Database)
 
 	batcher := storage.NewBatcher(store, storage.BatcherOptions{
@@ -96,7 +96,7 @@ func run(args []string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","version":%q}`, version)
+		_, _ = fmt.Fprintf(w, `{"status":"ok","version":%q}`, version)
 	})
 	mux.Handle("POST /api/v1/ingest",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, ingest.NewHTTPHandler(sink, 0)))

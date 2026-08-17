@@ -59,7 +59,7 @@ func TestNativeTCP(t *testing.T) {
 	// two events over a single connection
 	_, _ = conn.Write(event(simplePair("msg", "first"), simplePair("app", "t"), simplePair("lvl", "2")))
 	_, _ = conn.Write(event(simplePair("msg", "second")))
-	conn.Close()
+	_ = conn.Close()
 
 	waitCount(t, sa, 2)
 	e := sa.get(0)
@@ -84,7 +84,7 @@ func TestNativeUDP(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = conn.Write(event(simplePair("msg", "datagram"), simplePair("lvl", "ERROR")))
-	conn.Close()
+	_ = conn.Close()
 
 	waitCount(t, sa, 1)
 	if e := sa.get(0); e.Msg != "datagram" || e.Lvl != model.LevelError {

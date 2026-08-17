@@ -84,7 +84,7 @@ func (s *Store) Query(ctx context.Context, p query.Plan) ([]model.Entry, error) 
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []model.Entry
 	for rows.Next() {
