@@ -1,5 +1,5 @@
-// Package config загружает конфигурацию LogDoc.
-// Приоритет (от низшего к высшему): значения по умолчанию → yaml-файл → env (LOGDOC_*) → флаги.
+// Package config loads the LogDoc configuration.
+// Priority (lowest to highest): defaults → yaml file → env (LOGDOC_*) → flags.
 package config
 
 import (
@@ -19,19 +19,19 @@ type Config struct {
 }
 
 type HTTP struct {
-	// Addr — адрес API + UI (один порт, как в v1: 9001).
+	// Addr — address for API + UI (single port, same as v1: 9001).
 	Addr string `yaml:"addr"`
 }
 
 type Ingest struct {
-	// APIKey — единственный ключ однопользовательского режима S1.
-	// Пустой ключ = ingest без авторизации (dev-режим).
+	// APIKey — the single key of the S1 single-user mode.
+	// An empty key = ingest without authorization (dev mode).
 	APIKey string `yaml:"api_key"`
 	Native Native `yaml:"native"`
 }
 
 type Native struct {
-	// TCPAddr/UDPAddr — листенеры v1-совместимого протокола ld_format.
+	// TCPAddr/UDPAddr — listeners for the v1-compatible ld_format protocol.
 	TCPAddr string `yaml:"tcp_addr"`
 	UDPAddr string `yaml:"udp_addr"`
 }
@@ -42,11 +42,11 @@ type ClickHouse struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 
-	// Параметры батчинг-writer'а.
+	// Batching-writer parameters.
 	BatchSize     int           `yaml:"batch_size"`
 	FlushInterval time.Duration `yaml:"flush_interval"`
 
-	// TTLDays — срок хранения логов в днях.
+	// TTLDays — log retention period in days.
 	TTLDays int `yaml:"ttl_days"`
 }
 
@@ -72,21 +72,21 @@ func defaults() Config {
 	}
 }
 
-// Load собирает конфигурацию из файла (если задан), env и аргументов командной строки.
+// Load assembles the configuration from a file (if given), env and command-line arguments.
 func Load(args []string) (Config, error) {
 	cfg := defaults()
 
 	fs := flag.NewFlagSet("logdoc", flag.ContinueOnError)
-	cfgPath := fs.String("config", os.Getenv("LOGDOC_CONFIG"), "путь к yaml-конфигу")
-	httpAddr := fs.String("http-addr", "", "адрес HTTP API/UI (напр. :9001)")
-	tcpAddr := fs.String("native-tcp-addr", "", "адрес TCP-листенера ld_format")
-	udpAddr := fs.String("native-udp-addr", "", "адрес UDP-листенера ld_format")
-	apiKey := fs.String("api-key", "", "API-ключ ingest/query")
-	chAddr := fs.String("clickhouse-addr", "", "адрес ClickHouse (host:port, native)")
-	chDB := fs.String("clickhouse-db", "", "база ClickHouse")
-	chUser := fs.String("clickhouse-user", "", "пользователь ClickHouse")
-	chPass := fs.String("clickhouse-password", "", "пароль ClickHouse")
-	logLevel := fs.String("log-level", "", "уровень логирования: debug|info|warn|error")
+	cfgPath := fs.String("config", os.Getenv("LOGDOC_CONFIG"), "path to yaml config")
+	httpAddr := fs.String("http-addr", "", "HTTP API/UI address (e.g. :9001)")
+	tcpAddr := fs.String("native-tcp-addr", "", "ld_format TCP listener address")
+	udpAddr := fs.String("native-udp-addr", "", "ld_format UDP listener address")
+	apiKey := fs.String("api-key", "", "ingest/query API key")
+	chAddr := fs.String("clickhouse-addr", "", "ClickHouse address (host:port, native)")
+	chDB := fs.String("clickhouse-db", "", "ClickHouse database")
+	chUser := fs.String("clickhouse-user", "", "ClickHouse user")
+	chPass := fs.String("clickhouse-password", "", "ClickHouse password")
+	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -95,16 +95,16 @@ func Load(args []string) (Config, error) {
 	if *cfgPath != "" {
 		data, err := os.ReadFile(*cfgPath)
 		if err != nil {
-			return Config{}, fmt.Errorf("чтение конфига %s: %w", *cfgPath, err)
+			return Config{}, fmt.Errorf("reading config %s: %w", *cfgPath, err)
 		}
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return Config{}, fmt.Errorf("разбор конфига %s: %w", *cfgPath, err)
+			return Config{}, fmt.Errorf("parsing config %s: %w", *cfgPath, err)
 		}
 	}
 
 	applyEnv(&cfg)
 
-	// Флаги — высший приоритет.
+	// Flags take the highest priority.
 	setIf(&cfg.HTTP.Addr, *httpAddr)
 	setIf(&cfg.Ingest.Native.TCPAddr, *tcpAddr)
 	setIf(&cfg.Ingest.Native.UDPAddr, *udpAddr)

@@ -1,9 +1,9 @@
-// Package model — доменная модель LogDoc v2.
+// Package model — the LogDoc v2 domain model.
 package model
 
 import "time"
 
-// Level — уровень записи, значения совместимы с v1 ld_format (0–6).
+// Level — entry level; values are compatible with v1 ld_format (0–6).
 type Level uint8
 
 const (
@@ -25,13 +25,13 @@ func (l Level) String() string {
 	return "INFO"
 }
 
-// MarshalJSON сериализует уровень именем ("ERROR"), а не числом:
-// иначе []Level в JSON превращается в base64 (срез uint8).
+// MarshalJSON serializes the level as a name ("ERROR"), not a number:
+// otherwise a []Level turns into base64 in JSON (a uint8 slice).
 func (l Level) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + l.String() + `"`), nil
 }
 
-// ParseLevel принимает имя уровня (без учёта регистра). Неизвестное имя → INFO.
+// ParseLevel accepts a level name (case-insensitive). Unknown name → INFO.
 func ParseLevel(s string) Level {
 	for i, name := range levelNames {
 		if equalFold(s, name) {
@@ -41,7 +41,7 @@ func ParseLevel(s string) Level {
 	return LevelInfo
 }
 
-// equalFold — ASCII-вариант strings.EqualFold без аллокаций.
+// equalFold — an ASCII-only variant of strings.EqualFold without allocations.
 func equalFold(a, b string) bool {
 	if len(a) != len(b) {
 		return false
@@ -61,18 +61,18 @@ func equalFold(a, b string) bool {
 	return true
 }
 
-// DefaultTenant — единственный тенант однопользовательского режима S1.
-// tenant_id присутствует в схеме с первого дня (инвариант v2).
+// DefaultTenant — the only tenant of the S1 single-user mode.
+// tenant_id is present in the schema from day one (a v2 invariant).
 const DefaultTenant = "default"
 
-// Entry — запись лога LogDoc v2.
+// Entry — a LogDoc v2 log entry.
 type Entry struct {
-	TenantID string            // tenant_id, в S1 всегда DefaultTenant
-	Ts       time.Time         // время события (tsrc источника или время приёма)
-	App      string            // приложение
-	Src      string            // источник внутри приложения
-	Lvl      Level             // уровень 0–6
-	PID      string            // pid процесса-источника
-	Msg      string            // текст записи (обязателен)
-	Fields   map[string]string // произвольные структурные поля
+	TenantID string            // tenant_id, always DefaultTenant in S1
+	Ts       time.Time         // event time (source tsrc or receive time)
+	App      string            // application
+	Src      string            // source within the application
+	Lvl      Level             // level 0–6
+	PID      string            // pid of the source process
+	Msg      string            // entry text (mandatory)
+	Fields   map[string]string // arbitrary structured fields
 }

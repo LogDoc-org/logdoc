@@ -36,7 +36,7 @@ func TestParsePlanFull(t *testing.T) {
 		t.Fatalf("from: %v", p.From)
 	}
 	if p.FieldEq["user"] != "u1" || p.Search != "timeout" || p.Limit != 500 {
-		t.Fatalf("план: %+v", p)
+		t.Fatalf("plan: %+v", p)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestParsePlanDefaultsAndCaps(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p.Limit != DefaultLimit || len(p.Apps) != 0 || p.From != nil {
-		t.Fatalf("дефолты: %+v", p)
+		t.Fatalf("defaults: %+v", p)
 	}
 
 	p, err = ParsePlan(url.Values{"limit": {"999999"}})
@@ -54,16 +54,16 @@ func TestParsePlanDefaultsAndCaps(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p.Limit != MaxLimit {
-		t.Fatalf("limit=%d, ожидался кап %d", p.Limit, MaxLimit)
+		t.Fatalf("limit=%d, expected the cap %d", p.Limit, MaxLimit)
 	}
 }
 
 func TestParsePlanErrors(t *testing.T) {
-	if _, err := ParsePlan(url.Values{"from": {"вчера"}}); err == nil {
-		t.Fatal("ожидалась ошибка from")
+	if _, err := ParsePlan(url.Values{"from": {"yesterday"}}); err == nil {
+		t.Fatal("expected a from error")
 	}
 	if _, err := ParsePlan(url.Values{"limit": {"-5"}}); err == nil {
-		t.Fatal("ожидалась ошибка limit")
+		t.Fatal("expected a limit error")
 	}
 }
 
@@ -81,16 +81,16 @@ func TestPlanMatches(t *testing.T) {
 		p    Plan
 		want bool
 	}{
-		{"пустой план", Plan{TenantID: model.DefaultTenant}, true},
-		{"по app", Plan{TenantID: model.DefaultTenant, Apps: []string{"svc1"}}, true},
-		{"чужой app", Plan{TenantID: model.DefaultTenant, Apps: []string{"other"}}, false},
-		{"по уровню", Plan{TenantID: model.DefaultTenant, Levels: []model.Level{model.LevelError}}, true},
-		{"не тот уровень", Plan{TenantID: model.DefaultTenant, Levels: []model.Level{model.LevelDebug}}, false},
-		{"по полю", Plan{TenantID: model.DefaultTenant, FieldEq: map[string]string{"user": "u1"}}, true},
-		{"не то поле", Plan{TenantID: model.DefaultTenant, FieldEq: map[string]string{"user": "u2"}}, false},
-		{"поиск без регистра", Plan{TenantID: model.DefaultTenant, Search: "timeout"}, true},
-		{"поиск мимо", Plan{TenantID: model.DefaultTenant, Search: "panic"}, false},
-		{"чужой тенант", Plan{TenantID: "other"}, false},
+		{"empty plan", Plan{TenantID: model.DefaultTenant}, true},
+		{"by app", Plan{TenantID: model.DefaultTenant, Apps: []string{"svc1"}}, true},
+		{"other app", Plan{TenantID: model.DefaultTenant, Apps: []string{"other"}}, false},
+		{"by level", Plan{TenantID: model.DefaultTenant, Levels: []model.Level{model.LevelError}}, true},
+		{"wrong level", Plan{TenantID: model.DefaultTenant, Levels: []model.Level{model.LevelDebug}}, false},
+		{"by field", Plan{TenantID: model.DefaultTenant, FieldEq: map[string]string{"user": "u1"}}, true},
+		{"wrong field", Plan{TenantID: model.DefaultTenant, FieldEq: map[string]string{"user": "u2"}}, false},
+		{"case-insensitive search", Plan{TenantID: model.DefaultTenant, Search: "timeout"}, true},
+		{"search miss", Plan{TenantID: model.DefaultTenant, Search: "panic"}, false},
+		{"other tenant", Plan{TenantID: "other"}, false},
 	}
 	for _, c := range cases {
 		if got := c.p.Matches(e); got != c.want {

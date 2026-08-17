@@ -1,5 +1,5 @@
-// Package selflog — dogfooding: собственные slog-логи LogDoc уходят
-// в его же конвейер (app="logdoc") в дополнение к stderr.
+// Package selflog — dogfooding: LogDoc's own slog logs go into its own
+// pipeline (app="logdoc") in addition to stderr.
 package selflog
 
 import (
@@ -10,13 +10,13 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/model"
 )
 
-// TryAppender — неблокирующий приёмник (Batcher.TryAppend, Hub через адаптер).
+// TryAppender — a non-blocking receiver (Batcher.TryAppend, Hub via an adapter).
 type TryAppender interface {
 	TryAppend(e model.Entry) bool
 }
 
-// Handler декорирует обычный slog.Handler, дублируя записи в sink.
-// Sink обязан быть неблокирующим: логи не могут тормозить/дедлочить сервер.
+// Handler decorates a regular slog.Handler, duplicating records into the sink.
+// The sink must be non-blocking: logging must not slow down/deadlock the server.
 type Handler struct {
 	inner slog.Handler
 	sink  TryAppender

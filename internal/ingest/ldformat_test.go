@@ -11,13 +11,13 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/model"
 )
 
-// --- билдеры фикстур, повторяющие реальные аппендеры ---
+// --- fixture builders mirroring the real appenders ---
 
 func simplePair(key, value string) []byte {
 	return []byte(key + "=" + value + "\n")
 }
 
-// complexPair — как пишут Go/Java аппендеры: без хвостового '\n'.
+// complexPair — the way the Go/Java appenders write it: no trailing '\n'.
 func complexPair(key, value string) []byte {
 	var b bytes.Buffer
 	b.WriteString(key)
@@ -29,7 +29,7 @@ func complexPair(key, value string) []byte {
 	return b.Bytes()
 }
 
-// complexPairSpec — как в спеке: с хвостовым '\n'.
+// complexPairSpec — as in the spec: with a trailing '\n'.
 func complexPairSpec(key, value string) []byte {
 	return append(complexPair(key, value), '\n')
 }
@@ -49,12 +49,12 @@ func parseAll(t *testing.T, data []byte) []ldEvent {
 		evs = append(evs, ev)
 	})
 	if err != nil {
-		t.Fatalf("ошибка парсинга: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
 	return evs
 }
 
-// --- тесты парсера ---
+// --- parser tests ---
 
 func TestParseSimpleEvent(t *testing.T) {
 	data := event(
@@ -66,38 +66,39 @@ func TestParseSimpleEvent(t *testing.T) {
 	)
 	evs := parseAll(t, data)
 	if len(evs) != 1 {
-		t.Fatalf("ожидалось 1 событие, получено %d", len(evs))
+		t.Fatalf("expected 1 event, got %d", len(evs))
 	}
 	if evs[0]["msg"] != "hello" || evs[0]["app"] != "svc" || evs[0]["lvl"] != "ERROR" {
-		t.Fatalf("неверные пары: %v", evs[0])
+		t.Fatalf("wrong pairs: %v", evs[0])
 	}
 }
 
 func TestParseComplexPairAppenderDialect(t *testing.T) {
-	// msg со стектрейсом (перевод строки) → бинарная пара без хвостового '\n',
-	// как пишут logdoc-go-appender и logback-appenders.
+	// msg with a stack trace (contains a newline) → complex pair without a
+	// trailing '\n', as written by logdoc-go-appender and logback-appenders.
 	msg := "boom\nat main.main(main.go:10)"
 	data := event(
 		complexPair("msg", msg),
-		// после бинарной пары без хвоста сразу идёт '\n' конца события —
-		// парсер должен восстановить границу по заголовку следующего события
+		// after a trailer-less complex pair the end-of-event '\n' follows
+		// immediately — the parser must recover the boundary from the header
+		// of the next event
 	)
 	data = append(data, event(simplePair("msg", "next"))...)
 
 	evs := parseAll(t, data)
 	if len(evs) != 2 {
-		t.Fatalf("ожидалось 2 события, получено %d: %v", len(evs), evs)
+		t.Fatalf("expected 2 events, got %d: %v", len(evs), evs)
 	}
 	if evs[0]["msg"] != msg {
 		t.Fatalf("msg=%q", evs[0]["msg"])
 	}
 	if evs[1]["msg"] != "next" {
-		t.Fatalf("второе событие: %v", evs[1])
+		t.Fatalf("second event: %v", evs[1])
 	}
 }
 
 func TestParseComplexPairSpecDialect(t *testing.T) {
-	// Диалект спеки: бинарная пара с хвостовым '\n', дальше — ещё пары.
+	// Spec dialect: a complex pair with a trailing '\n', followed by more pairs.
 	data := []byte{6, 3}
 	data = append(data, complexPairSpec("msg", "a\nb")...)
 	data = append(data, simplePair("app", "svc")...)
@@ -105,10 +106,10 @@ func TestParseComplexPairSpecDialect(t *testing.T) {
 
 	evs := parseAll(t, data)
 	if len(evs) != 1 {
-		t.Fatalf("ожидалось 1 событие, получено %d: %v", len(evs), evs)
+		t.Fatalf("expected 1 event, got %d: %v", len(evs), evs)
 	}
 	if evs[0]["msg"] != "a\nb" || evs[0]["app"] != "svc" {
-		t.Fatalf("пары: %v", evs[0])
+		t.Fatalf("pairs: %v", evs[0])
 	}
 }
 
@@ -117,7 +118,7 @@ func TestParseBinaryValueWithNULs(t *testing.T) {
 	data := event(complexPair("msg", val), simplePair("app", "svc"))
 	evs := parseAll(t, data)
 	if len(evs) != 1 || evs[0]["msg"] != val {
-		t.Fatalf("бинарное значение потеряно: %v", evs)
+		t.Fatalf("binary value lost: %v", evs)
 	}
 }
 
@@ -128,19 +129,22 @@ func TestParseMultipleEventsStream(t *testing.T) {
 	}
 	evs := parseAll(t, data)
 	if len(evs) != 3 {
-		t.Fatalf("ожидалось 3 события, получено %d", len(evs))
+		t.Fatalf("expected 3 events, got %d", len(evs))
 	}
 }
 
 func TestParseGoAppenderRealisticEvent(t *testing.T) {
-	// Точная имитация logdoc-go-appender: header {6,3}, msg простой,
-	// tsrc с '\n' в значении → бинарная пара, lvl lowercase.
+	// Exact imitation of logdoc-go-appender: header {6,3}, simple msg,
+	// tsrc with a '\n' inside the value → complex pair, lowercase lvl.
+	// msg is a deliberately non-ASCII (multi-byte UTF-8) payload:
+	// keys must be ASCII, but values must pass through unmodified.
+	msg := "héllo 世界 ✓"
 	tsrcVal := time.Date(2026, 8, 17, 15, 4, 5, 123e6, time.Local).Format("060201150405.000") + "\n"
 	var data []byte
 	data = append(data, 6, 3)
-	data = append(data, simplePair("msg", "работает")...)
+	data = append(data, simplePair("msg", msg)...)
 	data = append(data, simplePair("app", "demo")...)
-	data = append(data, complexPair("tsrc", tsrcVal)...) // '\n' внутри значения
+	data = append(data, complexPair("tsrc", tsrcVal)...) // '\n' inside the value
 	data = append(data, simplePair("lvl", "warn")...)
 	data = append(data, simplePair("ip", "10.0.0.5:9999")...)
 	data = append(data, simplePair("pid", "77")...)
@@ -149,19 +153,22 @@ func TestParseGoAppenderRealisticEvent(t *testing.T) {
 
 	evs := parseAll(t, data)
 	if len(evs) != 1 {
-		t.Fatalf("ожидалось 1 событие, получено %d: %v", len(evs), evs)
+		t.Fatalf("expected 1 event, got %d: %v", len(evs), evs)
 	}
 	e, ok := EntryFromLD(evs[0], "192.168.1.1", time.Now())
 	if !ok {
-		t.Fatal("событие отброшено")
+		t.Fatal("event was dropped")
+	}
+	if e.Msg != msg {
+		t.Fatalf("non-ASCII msg corrupted: %q", e.Msg)
 	}
 	if e.Lvl != model.LevelWarn || e.App != "demo" || e.PID != "77" {
-		t.Fatalf("маппинг: %+v", e)
+		t.Fatalf("mapping: %+v", e)
 	}
 	if e.Ts.Year() != 2026 || e.Ts.Month() != 8 || e.Ts.Day() != 17 {
-		t.Fatalf("tsrc не распарсен: %v", e.Ts)
+		t.Fatalf("tsrc not parsed: %v", e.Ts)
 	}
-	// ip клиента перезаписывается серверным
+	// the client-sent ip is overwritten by the server-side one
 	if e.Fields["ip"] != "192.168.1.1" {
 		t.Fatalf("ip=%q", e.Fields["ip"])
 	}
@@ -169,25 +176,25 @@ func TestParseGoAppenderRealisticEvent(t *testing.T) {
 
 func TestEntryFromLDMissingMsgIgnored(t *testing.T) {
 	if _, ok := EntryFromLD(ldEvent{"app": "svc"}, "", time.Now()); ok {
-		t.Fatal("событие без msg должно игнорироваться")
+		t.Fatal("event without msg must be ignored")
 	}
 	if _, ok := EntryFromLD(nil, "", time.Now()); ok {
-		t.Fatal("nil-событие должно игнорироваться")
+		t.Fatal("nil event must be ignored")
 	}
 }
 
 func TestEntryFromLDJavaTsrcAndLevels(t *testing.T) {
-	// Java-аппендер: tsrc = yyMMddHHmmssSSS, lvl = имя уровня, TRACE → LOG на стороне клиента.
+	// Java appender: tsrc = yyMMddHHmmssSSS, lvl = level name, TRACE → LOG on the client side.
 	now := time.Now()
 	e, ok := EntryFromLD(ldEvent{
-		"msg":  "java msg",
-		"tsrc": "260817150405123",
-		"lvl":  "SEVERE",
-		"pid":  "12345@host",
+		"msg":    "java msg",
+		"tsrc":   "260817150405123",
+		"lvl":    "SEVERE",
+		"pid":    "12345@host",
 		"custom": "value",
 	}, "", now)
 	if !ok {
-		t.Fatal("событие отброшено")
+		t.Fatal("event was dropped")
 	}
 	if e.Ts.Year() != 2026 || e.Ts.Month() != 8 || e.Ts.Day() != 17 {
 		t.Fatalf("java tsrc: %v", e.Ts)
@@ -199,7 +206,7 @@ func TestEntryFromLDJavaTsrcAndLevels(t *testing.T) {
 		t.Fatalf("fields: %v", e.Fields)
 	}
 	if _, ok := e.Fields["tsrc"]; ok {
-		t.Fatal("служебный ключ tsrc не должен попадать в fields")
+		t.Fatal("reserved key tsrc must not end up in fields")
 	}
 }
 
@@ -212,7 +219,7 @@ func TestParseLDLevelVariants(t *testing.T) {
 	}
 	for in, want := range cases {
 		if got := parseLDLevel(in); got != want {
-			t.Errorf("parseLDLevel(%q)=%v, ожидалось %v", in, got, want)
+			t.Errorf("parseLDLevel(%q)=%v, expected %v", in, got, want)
 		}
 	}
 }
@@ -220,8 +227,8 @@ func TestParseLDLevelVariants(t *testing.T) {
 func TestParseRejectsBadKey(t *testing.T) {
 	data := append([]byte{6, 3}, []byte("bad\x01key=v\n\n")...)
 	err := ParseLDStream(bufio.NewReader(bytes.NewReader(data)), func(ldEvent) {})
-	if err == nil || !strings.Contains(err.Error(), "недопустимый байт") {
-		t.Fatalf("ожидалась ошибка ключа, получено %v", err)
+	if err == nil || !strings.Contains(err.Error(), "invalid byte") {
+		t.Fatalf("expected a key error, got %v", err)
 	}
 }
 
@@ -234,6 +241,6 @@ func TestParseRejectsHugeBinaryLength(t *testing.T) {
 	data = append(data, lenBuf[:]...)
 	err := ParseLDStream(bufio.NewReader(bytes.NewReader(data)), func(ldEvent) {})
 	if err == nil {
-		t.Fatal("ожидалась ошибка лимита длины")
+		t.Fatal("expected a length-limit error")
 	}
 }

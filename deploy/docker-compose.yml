@@ -1,5 +1,5 @@
-# Полный стек LogDoc v2: docker compose -f deploy/docker-compose.yml up
-# Цель S1: от `up` до первого лога — меньше 5 минут.
+# Full LogDoc v2 stack: docker compose -f deploy/docker-compose.yml up
+# S1 goal: from `up` to the first log in under 5 minutes.
 name: logdoc
 
 services:
@@ -8,8 +8,9 @@ services:
     environment:
       CLICKHOUSE_DB: logdoc
       CLICKHOUSE_USER: default
-      # Пароль обязателен: с пустым паролем entrypoint ClickHouse ограничивает
-      # пользователя default до localhost, и logdoc-контейнер не подключится.
+      # The password must be non-empty: with an empty password the ClickHouse
+      # entrypoint restricts the default user to localhost, so the logdoc
+      # container would not be able to connect.
       CLICKHOUSE_PASSWORD: logdoc
     ulimits:
       nofile:
@@ -34,7 +35,7 @@ services:
     environment:
       LOGDOC_CLICKHOUSE_ADDR: clickhouse:9000
       LOGDOC_CLICKHOUSE_PASSWORD: logdoc
-      # LOGDOC_API_KEY: поставь свой ключ для не-dev окружений
+      # LOGDOC_API_KEY: set your own key for non-dev environments
     ports:
       - "9001:9001"        # API + UI
       - "9999:9999/tcp"    # native ld_format

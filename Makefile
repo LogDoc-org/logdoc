@@ -20,7 +20,7 @@ vet:
 	go vet ./...
 
 lint: vet
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || echo "golangci-lint не установлен — выполнен только go vet"
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || echo "golangci-lint is not installed — ran go vet only"
 
 up:
 	docker compose -f deploy/docker-compose.dev.yml up -d

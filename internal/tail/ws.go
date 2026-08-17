@@ -12,8 +12,8 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/query"
 )
 
-// NewWSHandler — обработчик GET /api/v1/tail: WebSocket-поток записей,
-// отфильтрованных теми же параметрами, что и /api/v1/query (кроме времени/limit).
+// NewWSHandler — handler for GET /api/v1/tail: a WebSocket stream of entries
+// filtered by the same parameters as /api/v1/query (except time/limit).
 func NewWSHandler(hub *Hub) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plan, err := query.ParsePlan(r.URL.Query())
@@ -49,7 +49,7 @@ func NewWSHandler(hub *Hub) http.Handler {
 				err = conn.Write(writeCtx, websocket.MessageText, payload)
 				cancelWrite()
 				if err != nil {
-					return // клиент отвалился
+					return // client went away
 				}
 			}
 		}

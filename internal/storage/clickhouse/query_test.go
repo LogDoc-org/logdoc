@@ -9,9 +9,9 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/query"
 )
 
-// Golden-тесты: точный SQL для каждого варианта плана.
-// Ломаются при любом изменении генератора — это сознательно:
-// SQL-диалект — контракт бэкенда.
+// Golden tests: the exact SQL for each plan variant.
+// They break on any change to the generator — deliberately:
+// the SQL dialect is the backend's contract.
 
 func TestBuildSQLTenantOnly(t *testing.T) {
 	sql, args := BuildSQL("logdoc", query.Plan{TenantID: "default", Limit: 100})
@@ -53,7 +53,7 @@ func TestBuildSQLFullPlan(t *testing.T) {
 
 	wantArgs := []any{
 		"default", "svc1", "svc2", uint8(4), uint8(5), from, to,
-		"env", "prod", "user", "u1", // ключи fields — отсортированы
+		"env", "prod", "user", "u1", // fields keys are sorted
 		"timeout",
 	}
 	if !reflect.DeepEqual(args, wantArgs) {
@@ -65,6 +65,6 @@ func TestBuildSQLDefaultLimit(t *testing.T) {
 	sql, _ := BuildSQL("logdoc", query.Plan{TenantID: "default"})
 	want := " ORDER BY ts DESC LIMIT 100"
 	if len(sql) < len(want) || sql[len(sql)-len(want):] != want {
-		t.Fatalf("нет дефолтного лимита: %s", sql)
+		t.Fatalf("no default limit: %s", sql)
 	}
 }

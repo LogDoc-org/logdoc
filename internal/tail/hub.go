@@ -1,4 +1,4 @@
-// Package tail — live-поток записей: fan-out от ingest к WebSocket-подписчикам.
+// Package tail — the live stream of entries: fan-out from ingest to WebSocket subscribers.
 package tail
 
 import (
@@ -10,9 +10,9 @@ import (
 
 const subscriberBuffer = 1024
 
-// Hub рассылает входящие записи подписчикам с фильтрацией по плану.
-// Реализует ingest.Appender. Медленный подписчик теряет записи
-// (drop), но не тормозит ingest.
+// Hub fans incoming entries out to subscribers, filtered by their plans.
+// Implements ingest.Appender. A slow subscriber loses entries
+// (drop) but does not slow down ingest.
 type Hub struct {
 	mu   sync.RWMutex
 	subs map[*subscriber]struct{}
@@ -36,12 +36,12 @@ func (h *Hub) Append(e model.Entry) {
 		}
 		select {
 		case s.ch <- e:
-		default: // подписчик не успевает — запись пропускается
+		default: // subscriber can't keep up — the entry is skipped
 		}
 	}
 }
 
-// Subscribe регистрирует подписчика; cancel обязателен и идемпотентен.
+// Subscribe registers a subscriber; cancel is mandatory and idempotent.
 func (h *Hub) Subscribe(p query.Plan) (<-chan model.Entry, func()) {
 	s := &subscriber{plan: p, ch: make(chan model.Entry, subscriberBuffer)}
 	h.mu.Lock()

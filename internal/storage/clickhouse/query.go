@@ -11,8 +11,8 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/query"
 )
 
-// BuildSQL транслирует логический план в SQL ClickHouse.
-// Отдельная чистая функция — покрыта golden-тестами.
+// BuildSQL translates the logical plan into ClickHouse SQL.
+// A separate pure function — covered by golden tests.
 func BuildSQL(db string, p query.Plan) (string, []any) {
 	var sb strings.Builder
 	var args []any
@@ -67,7 +67,7 @@ func sortedKeys(m map[string]string) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	// детерминированный порядок — для golden-тестов и кэшируемости SQL
+	// deterministic order — for golden tests and SQL cacheability
 	for i := 1; i < len(keys); i++ {
 		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
 			keys[j], keys[j-1] = keys[j-1], keys[j]
@@ -76,7 +76,7 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// Query исполняет логический план.
+// Query executes the logical plan.
 func (s *Store) Query(ctx context.Context, p query.Plan) ([]model.Entry, error) {
 	sql, args := BuildSQL(s.db, p)
 
@@ -101,8 +101,8 @@ func (s *Store) Query(ctx context.Context, p query.Plan) ([]model.Entry, error) 
 	return out, rows.Err()
 }
 
-// RecordQueryStats пишет workload telemetry (fire-and-forget: ошибка не
-// влияет на ответ пользователю, только логируется).
+// RecordQueryStats writes workload telemetry (fire-and-forget: an error
+// does not affect the user's response, it is only logged).
 func (s *Store) RecordQueryStats(ctx context.Context, st query.Stats) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

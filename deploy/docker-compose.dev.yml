@@ -5,7 +5,7 @@ services:
     image: clickhouse/clickhouse-server:25.3
     container_name: logdoc-clickhouse
     ports:
-      - "8124:8123"   # HTTP (8123 на хосте часто занят другими CH)
+      - "8124:8123"   # HTTP (8123 on the host is often taken by another CH)
       - "9010:9000"   # native
     environment:
       CLICKHOUSE_DB: logdoc

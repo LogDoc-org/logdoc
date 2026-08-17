@@ -1,4 +1,4 @@
-// Package clickhouse — реализация storage.Store поверх ClickHouse.
+// Package clickhouse — the storage.Store implementation on top of ClickHouse.
 package clickhouse
 
 import (
@@ -17,7 +17,7 @@ type Options struct {
 	Database string
 	Username string
 	Password string
-	TTLDays  int // срок хранения логов; 0 → 30
+	TTLDays  int // log retention period; 0 → 30
 }
 
 type Store struct {
@@ -25,8 +25,8 @@ type Store struct {
 	db   string
 }
 
-// Open подключается к ClickHouse (с ожиданием готовности до 30 секунд —
-// удобно при одновременном старте с compose) и выполняет миграцию схемы.
+// Open connects to ClickHouse (waiting up to 30 seconds for readiness —
+// convenient when starting together with compose) and runs the schema migration.
 func Open(ctx context.Context, opts Options) (*Store, error) {
 	if opts.TTLDays <= 0 {
 		opts.TTLDays = 30
@@ -35,7 +35,7 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{opts.Addr},
 		Auth: clickhouse.Auth{
-			Database: "default", // база создаётся миграцией
+			Database: "default", // the database is created by the migration
 			Username: opts.Username,
 			Password: opts.Password,
 		},

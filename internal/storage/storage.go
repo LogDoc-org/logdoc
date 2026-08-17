@@ -1,6 +1,6 @@
-// Package storage — интерфейс хранилища логов.
-// Инвариант v2: весь код работает только через Store, конкретный backend
-// (ClickHouse сейчас, LogDoc Engine в будущем) — деталь реализации.
+// Package storage — the log storage interface.
+// v2 invariant: all code works only through Store; the concrete backend
+// (ClickHouse now, LogDoc Engine in the future) is an implementation detail.
 package storage
 
 import (
@@ -10,13 +10,13 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/query"
 )
 
-// Inserter — синхронная запись батчей (минимальная зависимость Batcher'а).
+// Inserter — synchronous batch writes (the Batcher's minimal dependency).
 type Inserter interface {
-	// InsertBatch атомарно пишет батч записей.
+	// InsertBatch atomically writes a batch of entries.
 	InsertBatch(ctx context.Context, entries []model.Entry) error
 }
 
-// Store — полный контракт хранилища: запись + исполнение логического плана.
+// Store — the full storage contract: writes + logical-plan execution.
 type Store interface {
 	Inserter
 	Query(ctx context.Context, p query.Plan) ([]model.Entry, error)

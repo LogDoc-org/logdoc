@@ -10,13 +10,13 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/model"
 )
 
-// Backend — исполнитель логического плана (реализуется storage-бэкендом).
+// Backend — executor of the logical plan (implemented by a storage backend).
 type Backend interface {
 	Query(ctx context.Context, p Plan) ([]model.Entry, error)
 }
 
-// Stats — workload telemetry одного запроса: сырьё для проектирования
-// будущего Engine (какие фильтры реально используются и почём они обходятся).
+// Stats — per-query workload telemetry: raw material for designing the
+// future Engine (which filters are actually used and what they cost).
 type Stats struct {
 	Ts         time.Time
 	TenantID   string
@@ -25,12 +25,12 @@ type Stats struct {
 	Rows       int
 }
 
-// StatsSink — приёмник телеметрии (реализуется storage-бэкендом).
+// StatsSink — telemetry receiver (implemented by a storage backend).
 type StatsSink interface {
 	RecordQueryStats(ctx context.Context, s Stats)
 }
 
-// EntryDTO — JSON-представление записи в API-ответах (query и tail).
+// EntryDTO — the JSON representation of an entry in API responses (query and tail).
 type EntryDTO struct {
 	Ts     time.Time         `json:"ts"`
 	App    string            `json:"app,omitempty"`
@@ -59,7 +59,7 @@ type queryResponse struct {
 	TookMs  int64      `json:"took_ms"`
 }
 
-// NewHTTPHandler — обработчик GET /api/v1/query.
+// NewHTTPHandler — handler for GET /api/v1/query.
 func NewHTTPHandler(backend Backend, stats StatsSink) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plan, err := ParsePlan(r.URL.Query())
@@ -73,12 +73,12 @@ func NewHTTPHandler(backend Backend, stats StatsSink) http.Handler {
 		took := time.Since(start)
 		if err != nil {
 			slog.Error("query failed", "err", err, "plan", plan.JSON())
-			httpError(w, http.StatusInternalServerError, "ошибка выполнения запроса")
+			httpError(w, http.StatusInternalServerError, "query execution error")
 			return
 		}
 
 		if stats != nil {
-			// асинхронно: телеметрия не должна задерживать ответ
+			// async: telemetry must not delay the response
 			go stats.RecordQueryStats(context.WithoutCancel(r.Context()), Stats{
 				Ts:         start,
 				TenantID:   plan.TenantID,

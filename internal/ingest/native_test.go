@@ -41,7 +41,7 @@ func waitCount(t *testing.T, sa *syncAppender, want int) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("дождались %d записей из %d", sa.count(), want)
+	t.Fatalf("got %d entries out of %d", sa.count(), want)
 }
 
 func TestNativeTCP(t *testing.T) {
@@ -56,15 +56,15 @@ func TestNativeTCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// два события в одном соединении
-	_, _ = conn.Write(event(simplePair("msg", "первое"), simplePair("app", "t"), simplePair("lvl", "2")))
-	_, _ = conn.Write(event(simplePair("msg", "второе")))
+	// two events over a single connection
+	_, _ = conn.Write(event(simplePair("msg", "first"), simplePair("app", "t"), simplePair("lvl", "2")))
+	_, _ = conn.Write(event(simplePair("msg", "second")))
 	conn.Close()
 
 	waitCount(t, sa, 2)
 	e := sa.get(0)
-	if e.Msg != "первое" || e.App != "t" || e.Lvl != model.LevelLog {
-		t.Fatalf("маппинг: %+v", e)
+	if e.Msg != "first" || e.App != "t" || e.Lvl != model.LevelLog {
+		t.Fatalf("mapping: %+v", e)
 	}
 	if e.Fields["ip"] != "127.0.0.1" {
 		t.Fatalf("ip=%q", e.Fields["ip"])
@@ -83,11 +83,11 @@ func TestNativeUDP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = conn.Write(event(simplePair("msg", "датаграмма"), simplePair("lvl", "ERROR")))
+	_, _ = conn.Write(event(simplePair("msg", "datagram"), simplePair("lvl", "ERROR")))
 	conn.Close()
 
 	waitCount(t, sa, 1)
-	if e := sa.get(0); e.Msg != "датаграмма" || e.Lvl != model.LevelError {
-		t.Fatalf("маппинг: %+v", e)
+	if e := sa.get(0); e.Msg != "datagram" || e.Lvl != model.LevelError {
+		t.Fatalf("mapping: %+v", e)
 	}
 }

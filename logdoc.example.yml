@@ -1,17 +1,17 @@
-# Пример конфигурации LogDoc v2.
-# Приоритет: значения по умолчанию → этот файл (-config / LOGDOC_CONFIG) → env LOGDOC_* → флаги.
+# Example LogDoc v2 configuration.
+# Precedence: defaults → this file (-config / LOGDOC_CONFIG) → env LOGDOC_* → flags.
 
 http:
   addr: ":9001"
 
 ingest:
-  api_key: ""          # пусто = без авторизации (только для dev)
+  api_key: ""          # empty = no auth (dev only)
   native:
     tcp_addr: ":9999"
     udp_addr: ":9999"
 
 clickhouse:
-  addr: "localhost:9010"   # порт из deploy/docker-compose.dev.yml
+  addr: "localhost:9010"   # port from deploy/docker-compose.dev.yml
   database: "logdoc"
   username: "default"
   password: ""

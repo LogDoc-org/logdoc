@@ -1,5 +1,5 @@
-// Package ui — встроенная сборка веб-интерфейса (go:embed).
-// Перед go build необходимо собрать фронтенд: make ui (npm run build → ui/dist).
+// Package ui embeds the built web UI (go:embed).
+// Build the frontend before go build: make ui (npm run build → ui/dist).
 package ui
 
 import "embed"

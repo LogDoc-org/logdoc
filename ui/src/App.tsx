@@ -71,7 +71,7 @@ export default function App() {
       const e: Entry = JSON.parse(ev.data);
       setEntries((prev) => [e, ...prev].slice(0, MAX_TAIL_ROWS));
     };
-    ws.onerror = () => setError("WebSocket: ошибка соединения");
+    ws.onerror = () => setError("WebSocket: connection error");
     ws.onclose = () => setTailing(false);
     wsRef.current = ws;
     setTailing(true);
@@ -94,13 +94,13 @@ export default function App() {
 
       <div className="filters">
         <input
-          placeholder="app (через запятую)"
+          placeholder="app (comma-separated)"
           value={app}
           onChange={(e) => setApp(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
         />
         <input
-          placeholder="поиск по msg"
+          placeholder="search in msg"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
@@ -113,9 +113,9 @@ export default function App() {
           title="limit"
           onChange={(e) => setLimit(Number(e.target.value))}
         />
-        <button onClick={search}>Поиск</button>
+        <button onClick={search}>Search</button>
         <button className={tailing ? "tail on" : "tail"} onClick={tailing ? stopTail : startTail}>
-          {tailing ? "■ Стоп" : "▶ Live tail"}
+          {tailing ? "■ Stop" : "▶ Live tail"}
         </button>
       </div>
 
@@ -131,25 +131,25 @@ export default function App() {
       {error && <div className="error">{error}</div>}
       {tookMs !== null && (
         <div className="muted stat">
-          {entries.length} записей за {tookMs} мс
+          {entries.length} entries in {tookMs} ms
         </div>
       )}
-      {tailing && <div className="muted stat">live: {entries.length} записей</div>}
+      {tailing && <div className="muted stat">live: {entries.length} entries</div>}
 
       <table>
         <thead>
           <tr>
-            <th>время</th>
+            <th>time</th>
             <th>lvl</th>
             <th>app</th>
             <th>src</th>
-            <th>сообщение</th>
+            <th>message</th>
           </tr>
         </thead>
         <tbody>
           {entries.map((e, i) => (
             <tr key={i}>
-              <td className="ts">{new Date(e.ts).toLocaleString("ru-RU")}</td>
+              <td className="ts">{new Date(e.ts).toLocaleString()}</td>
               <td>
                 <span className={`lv ${e.lvl}`}>{e.lvl}</span>
               </td>
@@ -168,7 +168,7 @@ export default function App() {
           ))}
         </tbody>
       </table>
-      {entries.length === 0 && !error && <div className="muted empty">нет записей</div>}
+      {entries.length === 0 && !error && <div className="muted empty">no entries</div>}
     </div>
   );
 }

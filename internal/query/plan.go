@@ -1,8 +1,8 @@
-// Package query — логический план запроса и HTTP API поиска.
+// Package query — the logical query plan and the search HTTP API.
 //
-// Инвариант v2: план не знает про SQL. Бэкенд (ClickHouse сейчас, Engine потом)
-// сам транслирует план в свой язык. Даже пока фильтры примитивны,
-// разделение план/исполнитель обязательно.
+// v2 invariant: the plan knows nothing about SQL. The backend (ClickHouse now,
+// Engine later) translates the plan into its own language itself. Even while
+// the filters are primitive, the plan/executor split is mandatory.
 package query
 
 import (
@@ -21,7 +21,7 @@ const (
 	MaxLimit     = 10000
 )
 
-// Plan — логический план запроса логов.
+// Plan — the logical plan of a log query.
 type Plan struct {
 	TenantID string            `json:"tenant_id"`
 	Apps     []string          `json:"apps,omitempty"`
@@ -29,17 +29,17 @@ type Plan struct {
 	From     *time.Time        `json:"from,omitempty"`
 	To       *time.Time        `json:"to,omitempty"`
 	FieldEq  map[string]string `json:"field_eq,omitempty"`
-	Search   string            `json:"search,omitempty"` // подстрока в msg, без учёта регистра
+	Search   string            `json:"search,omitempty"` // case-insensitive substring in msg
 	Limit    int               `json:"limit"`
 }
 
-// ParsePlan разбирает query-параметры HTTP запроса:
+// ParsePlan parses the query parameters of an HTTP request:
 //
-//	app=svc1&app=svc2      — фильтр по приложениям
-//	lvl=ERROR,WARN         — уровни (имена или цифры 0–6)
-//	from=RFC3339&to=RFC3339 — окно времени
-//	field.user=u1          — точное совпадение структурного поля
-//	q=timeout              — полнотекст по msg
+//	app=svc1&app=svc2      — filter by applications
+//	lvl=ERROR,WARN         — levels (names or digits 0–6)
+//	from=RFC3339&to=RFC3339 — time window
+//	field.user=u1          — exact match on a structured field
+//	q=timeout              — full-text over msg
 //	limit=500
 func ParsePlan(values url.Values) (Plan, error) {
 	p := Plan{
@@ -65,10 +65,10 @@ func ParsePlan(values url.Values) (Plan, error) {
 
 	var err error
 	if p.From, err = parseTime(values.Get("from")); err != nil {
-		return Plan{}, fmt.Errorf("параметр from: %w", err)
+		return Plan{}, fmt.Errorf("parameter from: %w", err)
 	}
 	if p.To, err = parseTime(values.Get("to")); err != nil {
-		return Plan{}, fmt.Errorf("параметр to: %w", err)
+		return Plan{}, fmt.Errorf("parameter to: %w", err)
 	}
 
 	for key, vals := range values {
@@ -85,7 +85,7 @@ func ParsePlan(values url.Values) (Plan, error) {
 	if raw := values.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n <= 0 {
-			return Plan{}, fmt.Errorf("параметр limit: %q", raw)
+			return Plan{}, fmt.Errorf("parameter limit: %q", raw)
 		}
 		p.Limit = n
 	}
@@ -107,8 +107,8 @@ func parseTime(s string) (*time.Time, error) {
 	return &t, nil
 }
 
-// Matches проверяет запись против фильтров плана (без времени и limit) —
-// используется live tail'ом для фильтрации потока в памяти.
+// Matches checks an entry against the plan's filters (excluding time and limit) —
+// used by live tail for in-memory stream filtering.
 func (p Plan) Matches(e model.Entry) bool {
 	if p.TenantID != "" && e.TenantID != p.TenantID {
 		return false
@@ -148,7 +148,7 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// JSON — сериализация плана для workload telemetry.
+// JSON — plan serialization for workload telemetry.
 func (p Plan) JSON() string {
 	b, err := json.Marshal(p)
 	if err != nil {

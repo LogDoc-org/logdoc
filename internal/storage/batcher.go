@@ -9,10 +9,10 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/model"
 )
 
-// Batcher копит записи и сбрасывает их в Store батчами —
-// по размеру батча или по интервалу, что наступит раньше.
-// Неудачный флаш ретраится с экспоненциальным backoff; после
-// исчерпания попыток батч отбрасывается с логированием (S1-решение).
+// Batcher accumulates entries and flushes them to the Store in batches —
+// by batch size or by interval, whichever comes first.
+// A failed flush is retried with exponential backoff; once the attempts
+// are exhausted the batch is dropped with logging (an S1 decision).
 type Batcher struct {
 	store    Inserter
 	in       chan model.Entry
@@ -32,8 +32,8 @@ type Batcher struct {
 type BatcherOptions struct {
 	BatchSize     int
 	FlushInterval time.Duration
-	MaxRetries    int           // попыток всего (вкл. первую); 0 → 3
-	Backoff       time.Duration // базовый backoff; 0 → 250ms
+	MaxRetries    int           // total attempts (incl. the first); 0 → 3
+	Backoff       time.Duration // base backoff; 0 → 250ms
 }
 
 func NewBatcher(store Inserter, opts BatcherOptions) *Batcher {
@@ -62,13 +62,13 @@ func NewBatcher(store Inserter, opts BatcherOptions) *Batcher {
 	return b
 }
 
-// Append ставит запись в очередь. Блокируется, если очередь полна (backpressure).
+// Append enqueues an entry. Blocks if the queue is full (backpressure).
 func (b *Batcher) Append(e model.Entry) {
 	b.in <- e
 }
 
-// TryAppend — неблокирующий вариант для самологирования: при полной очереди
-// запись отбрасывается (self-логи не должны уметь заблокировать сам батчер).
+// TryAppend — a non-blocking variant for self-logging: when the queue is full
+// the entry is dropped (self-logs must never be able to block the batcher itself).
 func (b *Batcher) TryAppend(e model.Entry) bool {
 	select {
 	case b.in <- e:
@@ -78,14 +78,14 @@ func (b *Batcher) TryAppend(e model.Entry) bool {
 	}
 }
 
-// Dropped — счётчик записей, потерянных после исчерпания ретраев.
+// Dropped — counter of entries lost after the retries were exhausted.
 func (b *Batcher) Dropped() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.dropped
 }
 
-// Close дожидается сброса всего накопленного и останавливает Batcher.
+// Close waits for everything accumulated to be flushed and stops the Batcher.
 func (b *Batcher) Close() {
 	b.once.Do(func() {
 		close(b.in)

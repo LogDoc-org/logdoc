@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// NativeServer — TCP/UDP листенеры v1-протокола ld_format.
+// NativeServer — TCP/UDP listeners for the v1 ld_format protocol.
 type NativeServer struct {
 	app Appender
 
@@ -21,7 +21,7 @@ type NativeServer struct {
 	closed chan struct{}
 }
 
-// StartNative поднимает листенеры. Пустой адрес отключает соответствующий листенер.
+// StartNative starts the listeners. An empty address disables the corresponding listener.
 func StartNative(app Appender, tcpAddr, udpAddr string) (*NativeServer, error) {
 	s := &NativeServer{app: app, closed: make(chan struct{})}
 
@@ -93,7 +93,7 @@ func (s *NativeServer) handleConn(conn net.Conn) {
 		}
 	})
 	if err != nil && !errors.Is(err, net.ErrClosed) {
-		slog.Warn("native tcp: разрыв разбора, соединение закрыто", "remote", remoteIP, "err", err)
+		slog.Warn("native tcp: parse failure, connection closed", "remote", remoteIP, "err", err)
 	}
 }
 
@@ -118,7 +118,7 @@ func (s *NativeServer) udpLoop() {
 				s.app.Append(e)
 			}
 		}); err != nil {
-			slog.Warn("native udp: ошибка разбора датаграммы", "remote", remoteIP, "err", err)
+			slog.Warn("native udp: datagram parse error", "remote", remoteIP, "err", err)
 		}
 	}
 }
@@ -134,7 +134,7 @@ func hostOnly(addr net.Addr) string {
 	return host
 }
 
-// Shutdown — Close с уважением к контексту (для симметрии с http.Server).
+// Shutdown — Close that respects the context (for symmetry with http.Server).
 func (s *NativeServer) Shutdown(ctx context.Context) {
 	done := make(chan struct{})
 	go func() { s.Close(); close(done) }()

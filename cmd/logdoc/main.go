@@ -1,4 +1,4 @@
-// LogDoc v2 — единый бинарь: ingest, storage, query, UI.
+// LogDoc v2 — a single binary: ingest, storage, query, UI.
 package main
 
 import (
@@ -25,7 +25,7 @@ import (
 	"github.com/LogDoc-org/logdoc/ui"
 )
 
-// fanout раздаёт входящую запись всем приёмникам (writer + live tail).
+// fanout delivers an incoming entry to all receivers (writer + live tail).
 type fanout []ingest.Appender
 
 func (f fanout) Append(e model.Entry) {
@@ -34,18 +34,18 @@ func (f fanout) Append(e model.Entry) {
 	}
 }
 
-// selfSink — неблокирующий приёмник самологов: writer через TryAppend + live tail.
+// selfSink is a non-blocking receiver for self-logs: writer via TryAppend + live tail.
 type selfSink struct {
 	batcher *storage.Batcher
 	hub     *tail.Hub
 }
 
 func (s selfSink) TryAppend(e model.Entry) bool {
-	s.hub.Append(e) // hub неблокирующий по построению
+	s.hub.Append(e) // the hub is non-blocking by construction
 	return s.batcher.TryAppend(e)
 }
 
-var version = "dev" // подставляется через -ldflags "-X main.version=..."
+var version = "dev" // injected via -ldflags "-X main.version=..."
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -84,12 +84,12 @@ func run(args []string) error {
 		BatchSize:     cfg.ClickHouse.BatchSize,
 		FlushInterval: cfg.ClickHouse.FlushInterval,
 	})
-	defer batcher.Close() // дожать хвост перед закрытием store
+	defer batcher.Close() // flush the remaining tail before closing the store
 
 	hub := tail.NewHub()
 	sink := fanout{batcher, hub}
 
-	// Dogfooding: с этого момента собственные логи LogDoc идут в него же.
+	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub}))
 	slog.SetDefault(logger)
 
@@ -147,7 +147,7 @@ func run(args []string) error {
 	return nil
 }
 
-// spaHandler отдаёт статику UI; неизвестные пути — index.html (SPA-роутинг).
+// spaHandler serves the UI static files; unknown paths get index.html (SPA routing).
 func spaHandler(fsys fs.FS) http.Handler {
 	fileServer := http.FileServerFS(fsys)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

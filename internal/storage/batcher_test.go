@@ -13,7 +13,7 @@ import (
 type fakeStore struct {
 	mu      sync.Mutex
 	batches [][]model.Entry
-	fails   int // сколько первых вызовов вернут ошибку
+	fails   int // how many initial calls return an error
 }
 
 func (f *fakeStore) InsertBatch(_ context.Context, entries []model.Entry) error {
@@ -57,7 +57,7 @@ func TestBatcherFlushBySize(t *testing.T) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	if len(fs.batches) != 1 || len(fs.batches[0]) != 3 {
-		t.Fatalf("ожидался один батч из 3 записей, получено %v", fs.batches)
+		t.Fatalf("expected one batch of 3 entries, got %v", fs.batches)
 	}
 }
 
@@ -74,9 +74,9 @@ func TestBatcherFlushOnClose(t *testing.T) {
 	fs := &fakeStore{}
 	b := NewBatcher(fs, BatcherOptions{BatchSize: 1000, FlushInterval: time.Hour})
 	b.Append(entry("a"))
-	b.Close() // должен дожать хвост
+	b.Close() // must flush the remainder
 	if fs.total() != 1 {
-		t.Fatalf("ожидалась 1 запись после Close, получено %d", fs.total())
+		t.Fatalf("expected 1 entry after Close, got %d", fs.total())
 	}
 }
 
@@ -87,7 +87,7 @@ func TestBatcherRetrySucceeds(t *testing.T) {
 	waitFor(t, func() bool { return fs.total() == 1 })
 	b.Close()
 	if b.Dropped() != 0 {
-		t.Fatalf("не должно быть потерь, dropped=%d", b.Dropped())
+		t.Fatalf("there must be no losses, dropped=%d", b.Dropped())
 	}
 }
 
@@ -98,7 +98,7 @@ func TestBatcherDropsAfterRetriesExhausted(t *testing.T) {
 	waitFor(t, func() bool { return b.Dropped() == 1 })
 	b.Close()
 	if fs.total() != 0 {
-		t.Fatalf("записей быть не должно, получено %d", fs.total())
+		t.Fatalf("there must be no entries, got %d", fs.total())
 	}
 }
 
@@ -111,5 +111,5 @@ func waitFor(t *testing.T, cond func() bool) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("условие не выполнилось за отведённое время")
+	t.Fatal("condition not met within the allotted time")
 }

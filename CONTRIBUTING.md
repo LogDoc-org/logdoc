@@ -1,43 +1,43 @@
 # Contributing to LogDoc
 
-Спасибо за интерес к проекту! Issues, вопросы и pull request'ы приветствуются.
+Thanks for your interest in the project! Issues, questions, and pull requests are welcome.
 
-## Окружение
+## Environment
 
-Нужны: Go 1.25+, Node 22+ (для UI), Docker.
+You need: Go 1.25+, Node 22+ (for the UI), Docker.
 
 ```bash
-make up      # ClickHouse для разработки (порты 8124/9010)
-make ui      # сборка фронтенда (ui/dist, идёт в go:embed)
+make up      # ClickHouse for development (ports 8124/9010)
+make ui      # build the frontend (ui/dist, goes into go:embed)
 make build   # bin/logdoc
-make test    # юнит-тесты
-make lint    # golangci-lint (или go vet, если не установлен)
+make test    # unit tests
+make lint    # golangci-lint (or go vet if not installed)
 ```
 
-Полный стек: `docker compose -f deploy/docker-compose.yml up -d --build`.
+Full stack: `docker compose -f deploy/docker-compose.yml up -d --build`.
 
 ## Pull requests
 
-- Небольшие сфокусированные PR проще ревьюить и быстрее мерджатся.
-- Новая логика — с тестами. Особенно парсинг протоколов (`internal/ingest`)
-  и генерация SQL (`internal/storage/clickhouse` — golden-тесты).
-- Перед отправкой: `make test` и `make lint` должны быть зелёными.
-- `ui/dist` коммитится вместе с изменениями UI (нужен для `go:embed` и CI).
+- Small, focused PRs are easier to review and get merged faster.
+- New logic comes with tests. Especially protocol parsing (`internal/ingest`)
+  and SQL generation (`internal/storage/clickhouse` — golden tests).
+- Before submitting: `make test` and `make lint` must be green.
+- `ui/dist` is committed together with UI changes (needed for `go:embed` and CI).
 
-## Архитектурные инварианты
+## Architectural invariants
 
-Три вещи, которые не режутся ни в каком PR (детали — в коде и README):
+Three things no PR may cut (details in the code and README):
 
-1. `tenant_id` присутствует в схеме и во всех запросах.
-2. Хранилище — только за интерфейсом `storage.Store`; никаких прямых
-   обращений к ClickHouse из ingest/query/UI-кода.
-3. Логический план запроса (`query.Plan`) отделён от SQL-генерации.
+1. `tenant_id` is present in the schema and in every query.
+2. Storage is accessed only through the `storage.Store` interface; no direct
+   ClickHouse calls from ingest/query/UI code.
+3. The logical query plan (`query.Plan`) is kept separate from SQL generation.
 
-## Багрепорты
+## Bug reports
 
-Указывайте версию (`GET /healthz`), способ ingest (HTTP / native TCP/UDP),
-и по возможности минимальный воспроизводимый пример.
+Include the version (`GET /healthz`), the ingest path (HTTP / native TCP/UDP),
+and, if possible, a minimal reproducible example.
 
-## Лицензия
+## License
 
-Отправляя вклад, вы соглашаетесь лицензировать его под Apache 2.0.
+By submitting a contribution, you agree to license it under Apache 2.0.
