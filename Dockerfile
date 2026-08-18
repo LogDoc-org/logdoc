@@ -18,8 +18,9 @@ RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /logdoc ./cm
 
 # --- Runtime ---
 FROM alpine:3.21
-RUN adduser -D -H logdoc
+RUN adduser -D -H logdoc && mkdir /data && chown logdoc /data
 USER logdoc
+WORKDIR /data
 COPY --from=build /logdoc /usr/local/bin/logdoc
-EXPOSE 9001 9999/tcp 9999/udp
+EXPOSE 9001 9999/tcp 9999/udp 4317
 ENTRYPOINT ["logdoc"]

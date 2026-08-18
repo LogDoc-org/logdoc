@@ -35,11 +35,16 @@ services:
     environment:
       LOGDOC_CLICKHOUSE_ADDR: clickhouse:9000
       LOGDOC_CLICKHOUSE_PASSWORD: logdoc
+      LOGDOC_GRAPH_DB_PATH: /data/logdoc-graph.db
       # LOGDOC_API_KEY: set your own key for non-dev environments
+    volumes:
+      - logdoc-data:/data   # architecture graph state (SQLite)
     ports:
       - "9001:9001"        # API + UI
       - "9999:9999/tcp"    # native ld_format
       - "9999:9999/udp"
+      - "4317:4317"        # OTLP/gRPC logs
 
 volumes:
   clickhouse-data:
+  logdoc-data:

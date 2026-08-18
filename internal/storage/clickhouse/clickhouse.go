@@ -102,6 +102,18 @@ CREATE TABLE IF NOT EXISTS %s.query_telemetry (
 ) ENGINE = MergeTree
 ORDER BY ts
 TTL toDateTime(ts) + INTERVAL 90 DAY`, s.db),
+		fmt.Sprintf(`
+CREATE TABLE IF NOT EXISTS %s.edge_metrics (
+    ts        DateTime64(3),
+    tenant_id LowCardinality(String),
+    src       LowCardinality(String),
+    dst       LowCardinality(String),
+    count     UInt64,
+    errors    UInt64
+) ENGINE = MergeTree
+PARTITION BY toDate(ts)
+ORDER BY (tenant_id, src, dst, ts)
+TTL toDateTime(ts) + INTERVAL 90 DAY`, s.db),
 	}
 	for _, q := range stmts {
 		if err := s.conn.Exec(ctx, q); err != nil {

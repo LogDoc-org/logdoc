@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/LogDoc-org/logdoc/internal/config"
+	"github.com/LogDoc-org/logdoc/internal/graph"
+	graphsqlite "github.com/LogDoc-org/logdoc/internal/graph/sqlite"
 	"github.com/LogDoc-org/logdoc/internal/ingest"
 	"github.com/LogDoc-org/logdoc/internal/model"
 	"github.com/LogDoc-org/logdoc/internal/query"
@@ -34,14 +36,17 @@ func (f fanout) Append(e model.Entry) {
 	}
 }
 
-// selfSink is a non-blocking receiver for self-logs: writer via TryAppend + live tail.
+// selfSink is a non-blocking receiver for self-logs: writer via TryAppend,
+// live tail, and the topology extractor (logdoc itself is a node on the map).
 type selfSink struct {
-	batcher *storage.Batcher
-	hub     *tail.Hub
+	batcher   *storage.Batcher
+	hub       *tail.Hub
+	extractor *graph.Extractor
 }
 
 func (s selfSink) TryAppend(e model.Entry) bool {
-	s.hub.Append(e) // the hub is non-blocking by construction
+	s.hub.Append(e)       // the hub is non-blocking by construction
+	s.extractor.Append(e) // mutex + map bumps only, never blocks on I/O
 	return s.batcher.TryAppend(e)
 }
 
@@ -86,11 +91,20 @@ func run(args []string) error {
 	})
 	defer batcher.Close() // flush the remaining tail before closing the store
 
+	graphStore, err := graphsqlite.Open(cfg.Graph.DBPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = graphStore.Close() }()
+	manager := graph.NewManager(graphStore, store)
+	extractor := graph.NewExtractor(manager, graph.ExtractorOptions{})
+	defer extractor.Close() // flush graph aggregates before stores close
+
 	hub := tail.NewHub()
-	sink := fanout{batcher, hub}
+	sink := fanout{batcher, hub, extractor}
 
 	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
-	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub}))
+	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
 	slog.SetDefault(logger)
 
 	mux := http.NewServeMux()
@@ -104,6 +118,10 @@ func run(args []string) error {
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, query.NewHTTPHandler(store, store)))
 	mux.Handle("GET /api/v1/tail",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, tail.NewWSHandler(hub)))
+	mux.Handle("GET /api/v1/topology",
+		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewHTTPHandler(manager)))
+	mux.Handle("GET /api/v1/topology/export",
+		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewExportHandler(manager)))
 
 	uiFS, err := fs.Sub(ui.Dist, "dist")
 	if err != nil {
@@ -114,6 +132,14 @@ func run(args []string) error {
 	native, err := ingest.StartNative(sink, cfg.Ingest.Native.TCPAddr, cfg.Ingest.Native.UDPAddr)
 	if err != nil {
 		return fmt.Errorf("native listeners: %w", err)
+	}
+
+	otlp, err := ingest.StartOTLP(sink, cfg.Ingest.OTLP.GRPCAddr, cfg.Ingest.APIKey)
+	if err != nil {
+		return fmt.Errorf("otlp listener: %w", err)
+	}
+	if addr := otlp.Addr(); addr != "" {
+		logger.Info("otlp grpc listening", "addr", addr)
 	}
 
 	srv := &http.Server{
@@ -140,6 +166,7 @@ func run(args []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	native.Shutdown(shutdownCtx)
+	otlp.Shutdown(shutdownCtx)
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("http shutdown: %w", err)
 	}

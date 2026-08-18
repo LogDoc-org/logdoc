@@ -9,6 +9,8 @@ ingest:
   native:
     tcp_addr: ":9999"
     udp_addr: ":9999"
+  otlp:
+    grpc_addr: ":4317"   # OTLP/gRPC logs; empty = disabled
 
 clickhouse:
   addr: "localhost:9010"   # port from deploy/docker-compose.dev.yml
@@ -17,6 +19,9 @@ clickhouse:
   password: ""
   batch_size: 10000
   flush_interval: 1s
+
+graph:
+  db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
 
 log:
   level: "info"

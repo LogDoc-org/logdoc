@@ -15,7 +15,13 @@ type Config struct {
 	HTTP       HTTP       `yaml:"http"`
 	Ingest     Ingest     `yaml:"ingest"`
 	ClickHouse ClickHouse `yaml:"clickhouse"`
+	Graph      Graph      `yaml:"graph"`
 	Log        Log        `yaml:"log"`
+}
+
+type Graph struct {
+	// DBPath — the embedded SQLite file with the Architecture Graph state.
+	DBPath string `yaml:"db_path"`
 }
 
 type HTTP struct {
@@ -28,6 +34,13 @@ type Ingest struct {
 	// An empty key = ingest without authorization (dev mode).
 	APIKey string `yaml:"api_key"`
 	Native Native `yaml:"native"`
+	OTLP   OTLP   `yaml:"otlp"`
+}
+
+type OTLP struct {
+	// GRPCAddr — OTLP/gRPC logs listener address (standard port 4317).
+	// Empty string disables the listener.
+	GRPCAddr string `yaml:"grpc_addr"`
 }
 
 type Native struct {
@@ -59,6 +72,7 @@ func defaults() Config {
 		HTTP: HTTP{Addr: ":9001"},
 		Ingest: Ingest{
 			Native: Native{TCPAddr: ":9999", UDPAddr: ":9999"},
+			OTLP:   OTLP{GRPCAddr: ":4317"},
 		},
 		ClickHouse: ClickHouse{
 			Addr:          "localhost:9010",
@@ -68,7 +82,8 @@ func defaults() Config {
 			FlushInterval: time.Second,
 			TTLDays:       30,
 		},
-		Log: Log{Level: "info"},
+		Graph: Graph{DBPath: "logdoc-graph.db"},
+		Log:   Log{Level: "info"},
 	}
 }
 
@@ -81,11 +96,13 @@ func Load(args []string) (Config, error) {
 	httpAddr := fs.String("http-addr", "", "HTTP API/UI address (e.g. :9001)")
 	tcpAddr := fs.String("native-tcp-addr", "", "ld_format TCP listener address")
 	udpAddr := fs.String("native-udp-addr", "", "ld_format UDP listener address")
+	otlpAddr := fs.String("otlp-grpc-addr", "", "OTLP/gRPC logs listener address (e.g. :4317)")
 	apiKey := fs.String("api-key", "", "ingest/query API key")
 	chAddr := fs.String("clickhouse-addr", "", "ClickHouse address (host:port, native)")
 	chDB := fs.String("clickhouse-db", "", "ClickHouse database")
 	chUser := fs.String("clickhouse-user", "", "ClickHouse user")
 	chPass := fs.String("clickhouse-password", "", "ClickHouse password")
+	graphDB := fs.String("graph-db-path", "", "SQLite file for the architecture graph")
 	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
 
 	if err := fs.Parse(args); err != nil {
@@ -108,11 +125,13 @@ func Load(args []string) (Config, error) {
 	setIf(&cfg.HTTP.Addr, *httpAddr)
 	setIf(&cfg.Ingest.Native.TCPAddr, *tcpAddr)
 	setIf(&cfg.Ingest.Native.UDPAddr, *udpAddr)
+	setIf(&cfg.Ingest.OTLP.GRPCAddr, *otlpAddr)
 	setIf(&cfg.Ingest.APIKey, *apiKey)
 	setIf(&cfg.ClickHouse.Addr, *chAddr)
 	setIf(&cfg.ClickHouse.Database, *chDB)
 	setIf(&cfg.ClickHouse.Username, *chUser)
 	setIf(&cfg.ClickHouse.Password, *chPass)
+	setIf(&cfg.Graph.DBPath, *graphDB)
 	setIf(&cfg.Log.Level, *logLevel)
 
 	return cfg, nil
@@ -122,11 +141,13 @@ func applyEnv(cfg *Config) {
 	setIf(&cfg.HTTP.Addr, os.Getenv("LOGDOC_HTTP_ADDR"))
 	setIf(&cfg.Ingest.Native.TCPAddr, os.Getenv("LOGDOC_NATIVE_TCP_ADDR"))
 	setIf(&cfg.Ingest.Native.UDPAddr, os.Getenv("LOGDOC_NATIVE_UDP_ADDR"))
+	setIf(&cfg.Ingest.OTLP.GRPCAddr, os.Getenv("LOGDOC_OTLP_GRPC_ADDR"))
 	setIf(&cfg.Ingest.APIKey, os.Getenv("LOGDOC_API_KEY"))
 	setIf(&cfg.ClickHouse.Addr, os.Getenv("LOGDOC_CLICKHOUSE_ADDR"))
 	setIf(&cfg.ClickHouse.Database, os.Getenv("LOGDOC_CLICKHOUSE_DB"))
 	setIf(&cfg.ClickHouse.Username, os.Getenv("LOGDOC_CLICKHOUSE_USER"))
 	setIf(&cfg.ClickHouse.Password, os.Getenv("LOGDOC_CLICKHOUSE_PASSWORD"))
+	setIf(&cfg.Graph.DBPath, os.Getenv("LOGDOC_GRAPH_DB_PATH"))
 	setIf(&cfg.Log.Level, os.Getenv("LOGDOC_LOG_LEVEL"))
 }
 

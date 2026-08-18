@@ -3,7 +3,9 @@
 Structured-log-first platform: a single Go binary on top of ClickHouse.
 Pipeline: **gather → pipe → sink → view → understand**.
 
-> S1 (the spine): ingest HTTP/native, search, live tail, mini UI. Work in progress.
+> S1 (the spine): ingest HTTP/native, search, live tail, mini UI.
+> S2 (the map): OTLP ingest and the Architecture Graph — a live service map
+> built from logs alone. Work in progress.
 
 ## Quick start
 
@@ -30,6 +32,23 @@ Live tail: WebSocket `GET /api/v1/tail` (same filter parameters).
 
 v1 compatibility: TCP/UDP `:9999` accepts the `ld_format` protocol —
 existing `logdoc-go-appender` and `logback-appenders` work unchanged.
+
+OTLP: gRPC logs on `:4317` — point any OpenTelemetry SDK or Collector at it
+(`service.name`→app, body→msg, severity→lvl, attributes→fields).
+
+## Architecture map
+
+LogDoc builds a live service map from the logs themselves: shared
+`trace_id`/`correlation_id` values and peer fields (`peer.service`, `target`,
+`upstream`) turn into directed edges between services. No agents, no tracing
+required — traces only refine the map.
+
+- UI: the **Topology** tab — force-directed map, click a service or an edge
+  to see its details and jump to its logs.
+- API: `GET /api/v1/topology?window=5m` — nodes and edges with windowed
+  rates (rps, error rate).
+- Export: `GET /api/v1/topology/export?format=mermaid|markdown` — paste the
+  current architecture straight into your docs.
 
 ## Development
 
