@@ -196,8 +196,10 @@ func TestEntryFromLDJavaTsrcAndLevels(t *testing.T) {
 	if !ok {
 		t.Fatal("event was dropped")
 	}
-	if e.Ts.Year() != 2026 || e.Ts.Month() != 8 || e.Ts.Day() != 17 {
-		t.Fatalf("java tsrc: %v", e.Ts)
+	// Compare the full timestamp: a fallback to now must not pass by accident.
+	want := time.Date(2026, 8, 17, 15, 4, 5, 123_000_000, time.Local)
+	if !e.Ts.Equal(want) {
+		t.Fatalf("java tsrc: got %v, want %v", e.Ts, want)
 	}
 	if e.Lvl != model.LevelSevere {
 		t.Fatalf("lvl=%v", e.Lvl)

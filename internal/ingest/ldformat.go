@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,12 +146,10 @@ func readKey(r *bufio.Reader) (string, byte, error) {
 	}
 }
 
-// tsrc layouts: the canonical one from the spec/Java, and the buggy one from
-// logdoc-go-appender (yy dd MM order + a dot before the milliseconds).
-var tsrcLayouts = []string{
-	"060102150405000",  // yyMMddHHmmssSSS — the spec and the Java appender
-	"060201150405.000", // logdoc-go-appender
-}
+// tsrc formats: the canonical one from the spec/Java (yyMMddHHmmssSSS) and
+// the buggy one from logdoc-go-appender (yy dd MM order + a dot before the
+// milliseconds). The canonical format is handled manually in parseTsrc:
+// Go layouts cannot express fractional seconds without a separator.
 
 // EntryFromLD builds a model.Entry from a raw event.
 // Returns false if there is no event or the mandatory msg is missing.
@@ -197,10 +196,17 @@ func EntryFromLD(ev ldEvent, remoteIP string, now time.Time) (model.Entry, bool)
 }
 
 func parseTsrc(s string) (time.Time, bool) {
-	for _, layout := range tsrcLayouts {
-		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
-			return t, true
+	// Spec/Java: yyMMddHHmmssSSS — 15 digits, milliseconds parsed by hand.
+	if len(s) == 15 {
+		if t, err := time.ParseInLocation("060102150405", s[:12], time.Local); err == nil {
+			if ms, err := strconv.Atoi(s[12:]); err == nil {
+				return t.Add(time.Duration(ms) * time.Millisecond), true
+			}
 		}
+	}
+	// logdoc-go-appender: yyddMMHHmmss.SSS
+	if t, err := time.ParseInLocation("060201150405.000", s, time.Local); err == nil {
+		return t, true
 	}
 	return time.Time{}, false
 }
