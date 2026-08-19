@@ -36,6 +36,8 @@ type SimNode = ApiNode & {
 type Selection = { kind: "node"; app: string } | { kind: "edge"; src: string; dst: string } | null;
 
 const ACCENT = "#e35b28";
+const BAD = "#ff4f4f"; // alarm red, deliberately far from the accent orange
+const BAD_RATE = 0.05; // error rate above which a node/edge is drawn as failing
 const WINDOWS = ["5m", "15m", "1h", "24h"];
 
 function apiKeyParam(): string {
@@ -191,6 +193,7 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
       ctx.scale(zm, zm);
       ctx.translate(-w / 2 + ox, -h / 2 + oy);
 
+      const now = performance.now();
       const sel = selectionRef.current;
       const hover = hoverRef.current;
       const focusApp = sel?.kind === "node" ? sel.app : hover;
@@ -210,21 +213,29 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         const isSel = sel?.kind === "edge" && sel.src === e.src && sel.dst === e.dst;
         const lit = isSel || (focusApp !== null && (e.src === focusApp || e.dst === focusApp));
         const dim = (focusApp !== null || sel?.kind === "edge") && !lit;
-        const bad = e.error_rate > 0.05;
+        const bad = e.error_rate > BAD_RATE;
         ctx.strokeStyle = dim
-          ? "rgba(120,126,140,0.12)"
+          ? bad
+            ? "rgba(255,79,79,0.2)"
+            : "rgba(120,126,140,0.12)"
           : isSel
             ? ACCENT
             : bad
-              ? "rgba(224,93,68,0.75)"
+              ? BAD
               : lit
                 ? "rgba(227,91,40,0.8)"
                 : "rgba(120,126,140,0.45)";
-        ctx.lineWidth = (isSel ? 2.2 : lit ? 1.8 : 1.1) / zm;
+        ctx.lineWidth = (isSel ? 2.2 : bad ? 2 : lit ? 1.8 : 1.1) / zm;
+        // Failing edges: marching red dashes, so the failure reads as live.
+        if (bad && !dim) {
+          ctx.setLineDash([7 / zm, 5 / zm]);
+          ctx.lineDashOffset = -(now / 40) / zm;
+        }
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // Direction arrow at the destination edge of the line.
         const dx = b.x - a.x;
@@ -243,9 +254,9 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         ctx.closePath();
         ctx.fill();
 
-        // Rate label on lit edges when zoomed in enough.
-        if ((lit || isSel) && zm > 0.5 && e.rps > 0) {
-          ctx.fillStyle = "rgba(216,219,226,0.85)";
+        // Rate label on lit edges — and always on failing ones.
+        if ((lit || isSel || (bad && !dim)) && zm > 0.5 && e.rps > 0) {
+          ctx.fillStyle = bad ? "rgba(255,122,110,0.95)" : "rgba(216,219,226,0.85)";
           ctx.font = `${11 / zm}px ui-monospace, monospace`;
           const label =
             e.error_rate > 0
@@ -260,8 +271,19 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         const isSel = sel?.kind === "node" && sel.app === n.app;
         const inEdgeSel = sel?.kind === "edge" && (sel.src === n.app || sel.dst === n.app);
         const lit = focusApp === null ? sel?.kind !== "edge" || inEdgeSel : neighbors.has(n.app);
+        const errRate = n.count > 0 ? n.errors / n.count : 0;
+        const bad = errRate > BAD_RATE;
         ctx.globalAlpha = lit ? 1 : 0.25;
-        ctx.fillStyle = n.errors > 0 && n.count > 0 && n.errors / n.count > 0.05 ? "#e05d44" : ACCENT;
+        // Failing node: pulsing red halo, unmistakable even at a glance.
+        if (bad) {
+          const pulse = (Math.sin(now / 260) + 1) / 2; // 0..1
+          ctx.strokeStyle = `rgba(255,79,79,${0.55 - 0.35 * pulse})`;
+          ctx.lineWidth = 2 / zm;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r + (3 + pulse * 5) / zm, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = bad ? BAD : ACCENT;
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
         ctx.fill();
@@ -274,6 +296,15 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         ctx.font = `${12 / Math.max(zm, 0.8)}px ui-monospace, monospace`;
         ctx.textAlign = "center";
         ctx.fillText(n.app, n.x, n.y + r + 14 / Math.max(zm, 0.8));
+        if (bad) {
+          ctx.fillStyle = lit ? "rgba(255,122,110,0.95)" : "rgba(255,122,110,0.4)";
+          ctx.font = `${10 / Math.max(zm, 0.8)}px ui-monospace, monospace`;
+          ctx.fillText(
+            `${(errRate * 100).toFixed(0)}% err`,
+            n.x,
+            n.y + r + 26 / Math.max(zm, 0.8),
+          );
+        }
         ctx.textAlign = "start";
         ctx.globalAlpha = 1;
       }
