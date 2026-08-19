@@ -25,6 +25,7 @@ const (
 type Plan struct {
 	TenantID string            `json:"tenant_id"`
 	Apps     []string          `json:"apps,omitempty"`
+	Srcs     []string          `json:"srcs,omitempty"`
 	Levels   []model.Level     `json:"levels,omitempty"`
 	From     *time.Time        `json:"from,omitempty"`
 	To       *time.Time        `json:"to,omitempty"`
@@ -36,6 +37,7 @@ type Plan struct {
 // ParsePlan parses the query parameters of an HTTP request:
 //
 //	app=svc1&app=svc2      — filter by applications
+//	src=orders&src=http    — filter by sources
 //	lvl=ERROR,WARN         — levels (names or digits 0–6)
 //	from=RFC3339&to=RFC3339 — time window
 //	field.user=u1          — exact match on a structured field
@@ -48,6 +50,7 @@ func ParsePlan(values url.Values) (Plan, error) {
 	}
 
 	p.Apps = append(p.Apps, values["app"]...)
+	p.Srcs = append(p.Srcs, values["src"]...)
 
 	for _, raw := range values["lvl"] {
 		for _, part := range strings.Split(raw, ",") {
@@ -114,6 +117,9 @@ func (p Plan) Matches(e model.Entry) bool {
 		return false
 	}
 	if len(p.Apps) > 0 && !contains(p.Apps, e.App) {
+		return false
+	}
+	if len(p.Srcs) > 0 && !contains(p.Srcs, e.Src) {
 		return false
 	}
 	if len(p.Levels) > 0 {

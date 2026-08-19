@@ -30,6 +30,7 @@ func TestBuildSQLFullPlan(t *testing.T) {
 	p := query.Plan{
 		TenantID: "default",
 		Apps:     []string{"svc1", "svc2"},
+		Srcs:     []string{"orders"},
 		Levels:   []model.Level{model.LevelError, model.LevelSevere},
 		From:     &from,
 		To:       &to,
@@ -42,6 +43,7 @@ func TestBuildSQLFullPlan(t *testing.T) {
 	wantSQL := "SELECT tenant_id, app, src, lvl, pid, ts, msg, fields FROM logdoc.logs" +
 		" WHERE tenant_id = ?" +
 		" AND app IN (?,?)" +
+		" AND src IN (?)" +
 		" AND lvl IN (?,?)" +
 		" AND ts >= ? AND ts <= ?" +
 		" AND fields[?] = ? AND fields[?] = ?" +
@@ -52,7 +54,7 @@ func TestBuildSQLFullPlan(t *testing.T) {
 	}
 
 	wantArgs := []any{
-		"default", "svc1", "svc2", uint8(4), uint8(5), from, to,
+		"default", "svc1", "svc2", "orders", uint8(4), uint8(5), from, to,
 		"env", "prod", "user", "u1", // fields keys are sorted
 		"timeout",
 	}

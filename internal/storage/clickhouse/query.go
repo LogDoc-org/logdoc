@@ -26,6 +26,12 @@ func BuildSQL(db string, p query.Plan) (string, []any) {
 			args = append(args, a)
 		}
 	}
+	if len(p.Srcs) > 0 {
+		sb.WriteString(" AND src IN (" + placeholders(len(p.Srcs)) + ")")
+		for _, s := range p.Srcs {
+			args = append(args, s)
+		}
+	}
 	if len(p.Levels) > 0 {
 		sb.WriteString(" AND lvl IN (" + placeholders(len(p.Levels)) + ")")
 		for _, l := range p.Levels {
