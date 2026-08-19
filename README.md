@@ -3,6 +3,8 @@
 Structured-log-first platform: a single Go binary on top of ClickHouse.
 Pipeline: **gather → pipe → sink → view → understand**.
 
+![Live architecture map built from logs](docs/img/topology.png)
+
 What makes it different:
 
 - **Architecture map from logs alone** — services and their dependencies
@@ -72,6 +74,12 @@ Then ask the agent things like *"why is checkout failing?"* — it walks the
 map, follows the error edges and reads the logs itself. Try it on the demo
 incident: `deploy/demo-incident.sh` injects a database failure cascading
 through three services.
+
+![An agent root-causing the demo incident through MCP, unattended](docs/img/agent-demo.gif)
+
+Above (2× speed): a single prompt, no human input — the agent walks the
+topology, follows one `trace_id` across four services and lands on the root
+cause: a bad `billing` deploy exhausting the postgres connection pool.
 
 ## Notifications
 
