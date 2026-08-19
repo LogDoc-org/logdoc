@@ -28,6 +28,10 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        # .git is dockerignored, so the version is passed in explicitly.
+        # Bump the default when tagging a release; override: LOGDOC_VERSION=x docker compose ...
+        VERSION: ${LOGDOC_VERSION:-v2.0.0}
     image: logdoc/logdoc:dev
     depends_on:
       clickhouse:
