@@ -17,9 +17,7 @@ export default function App() {
   return (
     <div className="wrap">
       <header>
-        <h1>
-          Log<span className="accent">Doc</span>
-        </h1>
+        <img src="/logo.svg" alt="LogDoc" className="logo" />
         <nav className="tabs">
           <button className={view === "logs" ? "tab on" : "tab"} onClick={() => setView("logs")}>
             Logs

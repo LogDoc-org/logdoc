@@ -112,13 +112,13 @@ export default function LogsView({ request }: { request: LogsRequest | null }) {
     <>
       <div className="filters">
         <input
-          placeholder="app (comma-separated)"
+          placeholder="$ app, app2..."
           value={app}
           onChange={(e) => setApp(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
         />
         <input
-          placeholder="search in msg"
+          placeholder="$ grep message..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
@@ -138,6 +138,7 @@ export default function LogsView({ request }: { request: LogsRequest | null }) {
       </div>
 
       <div className="levels">
+        <span className="sect">{"// levels"}</span>
         {LEVELS.map((name) => (
           <label key={name} className={lvl.includes(name) ? `lv ${name} sel` : `lv ${name}`}>
             <input type="checkbox" checked={lvl.includes(name)} onChange={() => toggleLevel(name)} />
@@ -166,12 +167,12 @@ export default function LogsView({ request }: { request: LogsRequest | null }) {
         </thead>
         <tbody>
           {entries.map((e, i) => (
-            <tr key={i}>
+            <tr key={i} className={`row ${e.lvl}`}>
               <td className="ts">{new Date(e.ts).toLocaleString()}</td>
               <td>
                 <span className={`lv ${e.lvl}`}>{e.lvl}</span>
               </td>
-              <td>{e.app}</td>
+              <td className="app">{e.app}</td>
               <td className="src">{e.src}</td>
               <td className="msg">
                 {e.msg}
