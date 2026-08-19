@@ -23,5 +23,34 @@ clickhouse:
 graph:
   db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
 
+# Built-in notifications: rules over the live stream, fanned out to channels.
+# No rules = the whole block is off. A rule with no `channels` uses every
+# configured channel.
+notify:
+  rules: []
+  # rules:
+  #   - name: billing error burst
+  #     type: error_threshold      # N entries with lvl >= ERROR in the window
+  #     app: billing               # optional: limit to one application
+  #     threshold: 10              # default 10
+  #     window: 1m                 # default 1m
+  #     cooldown: 5m               # min pause between alerts, default 5m
+  #     channels: [telegram, webhook]
+  #   - name: web went silent
+  #     type: silence              # the app logged before, then stopped
+  #     app: web                   # required for silence rules
+  #     window: 5m                 # default 5m
+  # telegram:
+  #   token: "123456:ABC..."      # or env LOGDOC_TELEGRAM_TOKEN
+  #   chat_ids: [123456789]
+  # webhook:
+  #   url: "https://example.com/hook"   # or env LOGDOC_WEBHOOK_URL; POST, JSON event
+  # email:
+  #   smtp_addr: "smtp.example.com:587"
+  #   from: "logdoc@example.com"
+  #   to: ["oncall@example.com"]
+  #   username: "logdoc@example.com"
+  #   password: ""                # or env LOGDOC_SMTP_PASSWORD
+
 log:
   level: "info"

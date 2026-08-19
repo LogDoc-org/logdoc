@@ -3,9 +3,16 @@
 Structured-log-first platform: a single Go binary on top of ClickHouse.
 Pipeline: **gather → pipe → sink → view → understand**.
 
-> S1 (the spine): ingest HTTP/native, search, live tail, mini UI.
-> S2 (the map): OTLP ingest and the Architecture Graph — a live service map
-> built from logs alone. Work in progress.
+What makes it different:
+
+- **Architecture map from logs alone** — services and their dependencies
+  appear on a live map without agents or mandatory tracing;
+- **MCP built in** — AI agents investigate your system through the same
+  interface you use;
+- **v1 protocol compatible** — existing LogDoc appenders keep working.
+
+New here? Start with [docs/getting-started.md](docs/getting-started.md).
+Coming from LogDoc v1? See [docs/migration-v1.md](docs/migration-v1.md).
 
 ## Quick start
 
@@ -65,6 +72,34 @@ Then ask the agent things like *"why is checkout failing?"* — it walks the
 map, follows the error edges and reads the logs itself. Try it on the demo
 incident: `deploy/demo-incident.sh` injects a database failure cascading
 through three services.
+
+## Notifications
+
+Built-in alert rules run over the live stream — no query polling:
+
+- **error_threshold** — N entries with level ≥ ERROR within a sliding window;
+- **silence** — a service that used to log stopped logging.
+
+Events go to Telegram, a webhook (JSON POST — the integration point for
+everything else) and/or email. Configure in `logdoc.yml`:
+
+```yaml
+notify:
+  rules:
+    - name: billing error burst
+      type: error_threshold
+      app: billing
+      threshold: 10
+      window: 1m
+    - name: web went silent
+      type: silence
+      app: web
+      window: 5m
+  telegram: { token: "...", chat_ids: [123456789] }
+  webhook:  { url: "https://example.com/hook" }
+```
+
+See `logdoc.example.yml` for every option.
 
 ## Development
 

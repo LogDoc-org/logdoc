@@ -9,14 +9,17 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/LogDoc-org/logdoc/internal/notify"
 )
 
 type Config struct {
-	HTTP       HTTP       `yaml:"http"`
-	Ingest     Ingest     `yaml:"ingest"`
-	ClickHouse ClickHouse `yaml:"clickhouse"`
-	Graph      Graph      `yaml:"graph"`
-	Log        Log        `yaml:"log"`
+	HTTP       HTTP          `yaml:"http"`
+	Ingest     Ingest        `yaml:"ingest"`
+	ClickHouse ClickHouse    `yaml:"clickhouse"`
+	Graph      Graph         `yaml:"graph"`
+	Notify     notify.Config `yaml:"notify"`
+	Log        Log           `yaml:"log"`
 }
 
 type Graph struct {
@@ -149,6 +152,10 @@ func applyEnv(cfg *Config) {
 	setIf(&cfg.ClickHouse.Password, os.Getenv("LOGDOC_CLICKHOUSE_PASSWORD"))
 	setIf(&cfg.Graph.DBPath, os.Getenv("LOGDOC_GRAPH_DB_PATH"))
 	setIf(&cfg.Log.Level, os.Getenv("LOGDOC_LOG_LEVEL"))
+	// Notification channel secrets can live outside the yaml file.
+	setIf(&cfg.Notify.Telegram.Token, os.Getenv("LOGDOC_TELEGRAM_TOKEN"))
+	setIf(&cfg.Notify.Webhook.URL, os.Getenv("LOGDOC_WEBHOOK_URL"))
+	setIf(&cfg.Notify.Email.Password, os.Getenv("LOGDOC_SMTP_PASSWORD"))
 }
 
 func setIf(dst *string, v string) {

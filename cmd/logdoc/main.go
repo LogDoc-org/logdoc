@@ -20,6 +20,7 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/ingest"
 	"github.com/LogDoc-org/logdoc/internal/mcpserver"
 	"github.com/LogDoc-org/logdoc/internal/model"
+	"github.com/LogDoc-org/logdoc/internal/notify"
 	"github.com/LogDoc-org/logdoc/internal/query"
 	"github.com/LogDoc-org/logdoc/internal/selflog"
 	"github.com/LogDoc-org/logdoc/internal/storage"
@@ -103,6 +104,17 @@ func run(args []string) error {
 
 	hub := tail.NewHub()
 	sink := fanout{batcher, hub, extractor}
+
+	notifier, err := notify.New(cfg.Notify)
+	if err != nil {
+		return err
+	}
+	if notifier != nil {
+		sink = append(sink, notifier)
+		notifier.Start()
+		defer notifier.Close() // wait for in-flight notifications
+		logger.Info("notifications enabled", "rules", len(cfg.Notify.Rules))
+	}
 
 	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
