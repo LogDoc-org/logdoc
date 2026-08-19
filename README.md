@@ -50,6 +50,22 @@ required — traces only refine the map.
 - Export: `GET /api/v1/topology/export?format=mermaid|markdown` — paste the
   current architecture straight into your docs.
 
+## MCP: the agent interface
+
+LogDoc is an MCP server: any agent (Claude Code, or anything speaking MCP
+over Streamable HTTP) can investigate your system through three tools —
+`query_logs`, `get_topology`, `get_service_card`.
+
+```bash
+claude mcp add --transport http logdoc http://localhost:9001/mcp \
+  --header "X-API-Key: <your key>"
+```
+
+Then ask the agent things like *"why is checkout failing?"* — it walks the
+map, follows the error edges and reads the logs itself. Try it on the demo
+incident: `deploy/demo-incident.sh` injects a database failure cascading
+through three services.
+
 ## Development
 
 ```bash

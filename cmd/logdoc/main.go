@@ -18,6 +18,7 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/graph"
 	graphsqlite "github.com/LogDoc-org/logdoc/internal/graph/sqlite"
 	"github.com/LogDoc-org/logdoc/internal/ingest"
+	"github.com/LogDoc-org/logdoc/internal/mcpserver"
 	"github.com/LogDoc-org/logdoc/internal/model"
 	"github.com/LogDoc-org/logdoc/internal/query"
 	"github.com/LogDoc-org/logdoc/internal/selflog"
@@ -122,6 +123,15 @@ func run(args []string) error {
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewExportHandler(manager)))
+
+	// Agent interface: MCP over Streamable HTTP (query_logs, get_topology,
+	// get_service_card). The transport uses GET/POST/DELETE; each method is
+	// registered separately so the catch-all "GET /" UI route stays valid.
+	mcpSrv := mcpserver.New(store, store, manager, version)
+	mcpHandler := ingest.RequireAPIKey(cfg.Ingest.APIKey, mcpSrv.Handler())
+	for _, m := range []string{"GET", "POST", "DELETE"} {
+		mux.Handle(m+" /mcp", mcpHandler)
+	}
 
 	uiFS, err := fs.Sub(ui.Dist, "dist")
 	if err != nil {
