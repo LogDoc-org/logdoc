@@ -17,11 +17,19 @@ import (
 type Config struct {
 	HTTP       HTTP                `yaml:"http"`
 	Ingest     Ingest              `yaml:"ingest"`
+	Auth       Auth                `yaml:"auth"`
 	ClickHouse ClickHouse          `yaml:"clickhouse"`
 	Graph      Graph               `yaml:"graph"`
 	Pipelines  []pipeline.Pipeline `yaml:"pipelines"`
 	Notify     notify.Config       `yaml:"notify"`
 	Log        Log                 `yaml:"log"`
+}
+
+type Auth struct {
+	// DBPath — SQLite file with users, personal tokens and the JWT secret.
+	DBPath string `yaml:"db_path"`
+	// SessionTTL — lifetime of a UI login session (JWT).
+	SessionTTL time.Duration `yaml:"session_ttl"`
 }
 
 type Graph struct {
@@ -95,6 +103,7 @@ func defaults() Config {
 			FlushInterval: time.Second,
 			TTLDays:       30,
 		},
+		Auth:   Auth{DBPath: "logdoc-users.db", SessionTTL: 24 * time.Hour},
 		Graph:  Graph{DBPath: "logdoc-graph.db"},
 		Notify: notify.Config{RulesPath: "logdoc-rules.json"},
 		Log:    Log{Level: "info"},
@@ -168,6 +177,7 @@ func applyEnv(cfg *Config) {
 	setIf(&cfg.ClickHouse.Username, os.Getenv("LOGDOC_CLICKHOUSE_USER"))
 	setIf(&cfg.ClickHouse.Password, os.Getenv("LOGDOC_CLICKHOUSE_PASSWORD"))
 	setIf(&cfg.Graph.DBPath, os.Getenv("LOGDOC_GRAPH_DB_PATH"))
+	setIf(&cfg.Auth.DBPath, os.Getenv("LOGDOC_AUTH_DB_PATH"))
 	setIf(&cfg.Log.Level, os.Getenv("LOGDOC_LOG_LEVEL"))
 	// Notification channel secrets can live outside the yaml file.
 	setIf(&cfg.Notify.Telegram.Token, os.Getenv("LOGDOC_TELEGRAM_TOKEN"))

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LogDoc-org/logdoc/internal/auth"
 	"github.com/LogDoc-org/logdoc/internal/config"
 	"github.com/LogDoc-org/logdoc/internal/graph"
 	graphsqlite "github.com/LogDoc-org/logdoc/internal/graph/sqlite"
@@ -124,6 +125,21 @@ func run(args []string) error {
 		return fmt.Errorf("notify rules file: %w", err)
 	}
 
+	// Users, roles, tokens. The config api_key stays as the bootstrap admin
+	// credential; no key and no users = open dev mode.
+	authStore, err := auth.OpenStore(cfg.Auth.DBPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = authStore.Close() }()
+	authSvc, err := auth.NewService(authStore, cfg.Ingest.APIKey, cfg.Auth.SessionTTL)
+	if err != nil {
+		return err
+	}
+	if !authSvc.Open() {
+		logger.Info("auth enabled", "db", cfg.Auth.DBPath)
+	}
+
 	// Pipelines process entries before every consumer (storage, tail,
 	// topology, notifications). Self-logs bypass them deliberately.
 	var stream ingest.Appender = sink
@@ -144,23 +160,32 @@ func run(args []string) error {
 		_, _ = fmt.Fprintf(w, `{"status":"ok","version":%q}`, version)
 	})
 	mux.Handle("POST /api/v1/ingest",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, ingest.NewHTTPHandler(stream, 0)))
+		authSvc.Require(auth.RoleMember, ingest.NewHTTPHandler(stream, 0)))
 	mux.Handle("GET /api/v1/query",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, query.NewHTTPHandler(store, store)))
+		authSvc.Require(auth.RoleMember, query.NewHTTPHandler(store, store)))
 	mux.Handle("GET /api/v1/tail",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, tail.NewWSHandler(hub)))
+		authSvc.Require(auth.RoleMember, tail.NewWSHandler(hub)))
 	mux.Handle("GET /api/v1/topology",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewHTTPHandler(manager)))
+		authSvc.Require(auth.RoleMember, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewExportHandler(manager)))
+		authSvc.Require(auth.RoleMember, graph.NewExportHandler(manager)))
 	mux.Handle("GET /api/v1/topology/diff",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDiffHandler(manager)))
+		authSvc.Require(auth.RoleMember, graph.NewDiffHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDeploysHandler(manager)))
-	// Rules CRUD; registered per method so the catch-all "GET /" UI route
-	// stays valid.
+		authSvc.Require(auth.RoleMember, graph.NewDeploysHandler(manager)))
+	// Rules: members see them, only admins change them. Registered per method
+	// so the catch-all "GET /" UI route stays valid.
+	mux.Handle("GET /api/v1/notify/rules", authSvc.Require(auth.RoleMember, rulesAPI.Handler()))
+	for _, m := range []string{"POST", "DELETE"} {
+		mux.Handle(m+" /api/v1/notify/rules", authSvc.Require(auth.RoleAdmin, rulesAPI.Handler()))
+	}
+
+	// Sessions, personal tokens, user management.
+	mux.Handle("POST /api/v1/auth/login", authSvc.LoginHandler())
+	mux.Handle("GET /api/v1/auth/me", authSvc.MeHandler())
 	for _, m := range []string{"GET", "POST", "DELETE"} {
-		mux.Handle(m+" /api/v1/notify/rules", ingest.RequireAPIKey(cfg.Ingest.APIKey, rulesAPI.Handler()))
+		mux.Handle(m+" /api/v1/auth/tokens", authSvc.Require(auth.RoleMember, authSvc.TokensHandler()))
+		mux.Handle(m+" /api/v1/users", authSvc.Require(auth.RoleAdmin, authSvc.UsersHandler()))
 	}
 
 	// Agent interface: MCP over Streamable HTTP (query_logs, get_topology,
@@ -168,7 +193,7 @@ func run(args []string) error {
 	// each method is registered separately so the catch-all "GET /" UI route
 	// stays valid.
 	mcpSrv := mcpserver.New(store, store, manager, version)
-	mcpHandler := ingest.RequireAPIKey(cfg.Ingest.APIKey, mcpSrv.Handler())
+	mcpHandler := authSvc.Require(auth.RoleMember, mcpSrv.Handler())
 	for _, m := range []string{"GET", "POST", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)
 	}
@@ -189,7 +214,7 @@ func run(args []string) error {
 		return fmt.Errorf("syslog listeners: %w", err)
 	}
 
-	otlp, err := ingest.StartOTLP(stream, cfg.Ingest.OTLP.GRPCAddr, cfg.Ingest.APIKey)
+	otlp, err := ingest.StartOTLP(stream, cfg.Ingest.OTLP.GRPCAddr, authSvc.Verify)
 	if err != nil {
 		return fmt.Errorf("otlp listener: %w", err)
 	}

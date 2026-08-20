@@ -2,11 +2,9 @@
 package ingest
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/LogDoc-org/logdoc/internal/model"
@@ -82,32 +80,6 @@ func NewHTTPHandler(app Appender, maxBodyBytes int64) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = fmt.Fprintf(w, `{"accepted":%d}`, len(entries))
-	})
-}
-
-// RequireAPIKey — key-based authorization middleware.
-// The key is accepted in X-API-Key, Authorization: Bearer <key> or the
-// api_key query parameter (for browser WebSocket, where headers are unavailable).
-// An empty configured key = authorization disabled (dev mode).
-func RequireAPIKey(key string, next http.Handler) http.Handler {
-	if key == "" {
-		return next
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got := r.Header.Get("X-API-Key")
-		if got == "" {
-			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-				got = strings.TrimPrefix(auth, "Bearer ")
-			}
-		}
-		if got == "" {
-			got = r.URL.Query().Get("api_key")
-		}
-		if subtle.ConstantTimeCompare([]byte(got), []byte(key)) != 1 {
-			httpError(w, http.StatusUnauthorized, "invalid API key")
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
 }
 

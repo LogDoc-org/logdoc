@@ -6,7 +6,6 @@ package ingest
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -37,9 +36,9 @@ type logsService struct {
 }
 
 // StartOTLP starts the OTLP/gRPC listener. An empty addr disables it.
-// A non-empty apiKey is required from clients via the x-api-key or
-// authorization (Bearer) metadata.
-func StartOTLP(app Appender, addr, apiKey string) (*OTLPServer, error) {
+// A non-nil verify is called with the credential clients pass via the
+// x-api-key or authorization (Bearer) metadata; nil = no auth.
+func StartOTLP(app Appender, addr string, verify func(cred string) bool) (*OTLPServer, error) {
 	if addr == "" {
 		return &OTLPServer{}, nil
 	}
@@ -47,7 +46,7 @@ func StartOTLP(app Appender, addr, apiKey string) (*OTLPServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("otlp grpc listen %s: %w", addr, err)
 	}
-	srv := grpc.NewServer(grpc.UnaryInterceptor(apiKeyUnaryInterceptor(apiKey)))
+	srv := grpc.NewServer(grpc.UnaryInterceptor(authUnaryInterceptor(verify)))
 	collogspb.RegisterLogsServiceServer(srv, &logsService{app: app})
 	go func() { _ = srv.Serve(ln) }()
 	return &OTLPServer{srv: srv, ln: ln}, nil
@@ -78,9 +77,9 @@ func (s *OTLPServer) Shutdown(ctx context.Context) {
 	}
 }
 
-func apiKeyUnaryInterceptor(key string) grpc.UnaryServerInterceptor {
+func authUnaryInterceptor(verify func(cred string) bool) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if key == "" {
+		if verify == nil {
 			return handler(ctx, req)
 		}
 		md, _ := metadata.FromIncomingContext(ctx)
@@ -90,8 +89,8 @@ func apiKeyUnaryInterceptor(key string) grpc.UnaryServerInterceptor {
 				got = strings.TrimPrefix(auth, "Bearer ")
 			}
 		}
-		if subtle.ConstantTimeCompare([]byte(got), []byte(key)) != 1 {
-			return nil, status.Error(codes.Unauthenticated, "invalid API key")
+		if !verify(got) {
+			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 		}
 		return handler(ctx, req)
 	}

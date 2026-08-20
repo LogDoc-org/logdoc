@@ -172,6 +172,21 @@ server-side; config-file rules are read-only there). The same works over
 
 See `logdoc.example.yml` for every option.
 
+## Users and roles
+
+With no users and no API key everything is open — good for a laptop. For a
+team, set `ingest.api_key` (the bootstrap admin credential), sign in with it
+and create accounts on the **Access** tab (or `POST /api/v1/users`):
+
+- **member** — search, tail, topology, export;
+- **admin** — everything, plus notification rules and user management.
+
+Users sign in with login+password (JWT session) and issue personal `ldt_...`
+tokens for scripts and CI — revocable per token, carrying the user's role.
+Every credential is sent the same way: `X-API-Key`, `Authorization: Bearer`,
+or `?api_key=`. Creating the first user turns auth on everywhere, including
+OTLP ingest; the API key remains the recovery path.
+
 ## Development
 
 ```bash
@@ -183,7 +198,7 @@ make test
 ```
 
 Auth: `LOGDOC_API_KEY` (`X-API-Key` header, `Authorization: Bearer`, or `?api_key=`).
-An empty key means dev mode with no auth.
+An empty key and no users means dev mode with no auth (see "Users and roles").
 
 ## License
 

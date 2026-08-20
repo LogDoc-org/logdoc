@@ -20,7 +20,7 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 | Java server (`logdoc/community` image) + PostgreSQL + ClickHouse | one Go binary + ClickHouse |
 | Sink/pipe plugins as jars/`.so` loaded by the server | protocols and notifications built in |
 | Watchdog rules with composite conditions | alert rules with nested and/or `match` conditions — `notify:` in yaml or the Rules tab in the UI |
-| Users, roles, per-user tokens | single API key (multi-user later) |
+| Users, roles, per-user tokens | built-in users with admin/member roles, JWT sessions, revocable personal tokens (Access tab); the API key stays as the bootstrap credential |
 | Syslog sink plugin (jar) | built-in syslog listener (RFC 3164/5424, TCP+UDP), `ingest.syslog` in config |
 | Parsing in the file-watchers agent only | server-side `pipelines:` — grok/regex/json parsing, severity mapping, rewrites and drops on ingest, whatever the source |
 | — | OTLP/gRPC ingest, architecture map, Mermaid export, MCP server |
@@ -31,7 +31,7 @@ Planned, prioritized by demand — open an issue if one of these blocks you:
 
 - a plugin SDK (v2 will use gRPC subprocesses instead of in-process jars);
 - journald ingest, OTLP traces and metrics;
-- RBAC and multi-tenant UI.
+- multi-tenant UI and fine-grained (per-app) permissions.
 
 ## Migration steps
 

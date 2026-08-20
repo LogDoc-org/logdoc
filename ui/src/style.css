@@ -434,3 +434,50 @@ tr.rules-off td { opacity: 0.45; }
 .rules-rowactions { white-space: nowrap; font-family: var(--mono); font-size: 12px; }
 .rules-rowactions .clickable { margin-right: 10px; color: var(--muted); }
 .rules-rowactions .clickable:hover { color: var(--accent); }
+
+/* --- login & access --- */
+.login { display: flex; flex-direction: column; gap: 14px; max-width: 360px; margin: 60px auto; }
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-card input {
+  background: var(--input);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.login-card input:focus { outline: none; border-color: var(--text); }
+.login-card input::placeholder { color: var(--muted); }
+.access { display: flex; flex-direction: column; gap: 28px; }
+.access section { display: flex; flex-direction: column; gap: 12px; }
+.access select {
+  background: var(--input);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.access select:focus { outline: none; border-color: var(--text); }
+.token-fresh {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.token-fresh code { color: var(--accent); font-family: var(--mono); user-select: all; }

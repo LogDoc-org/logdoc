@@ -80,28 +80,4 @@ func TestIngestRejectsBadJSONAndEmpty(t *testing.T) {
 	}
 }
 
-func TestAPIKeyAuth(t *testing.T) {
-	fa := &fakeAppender{}
-	h := RequireAPIKey("secret", NewHTTPHandler(fa, 0))
-
-	if w := post(h, `[{"msg":"x"}]`, nil); w.Code != http.StatusUnauthorized {
-		t.Fatalf("no key: code %d", w.Code)
-	}
-	if w := post(h, `[{"msg":"x"}]`, map[string]string{"X-API-Key": "wrong"}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong key: code %d", w.Code)
-	}
-	if w := post(h, `[{"msg":"x"}]`, map[string]string{"X-API-Key": "secret"}); w.Code != http.StatusAccepted {
-		t.Fatalf("X-API-Key: code %d", w.Code)
-	}
-	if w := post(h, `[{"msg":"x"}]`, map[string]string{"Authorization": "Bearer secret"}); w.Code != http.StatusAccepted {
-		t.Fatalf("Bearer: code %d", w.Code)
-	}
-}
-
-func TestAPIKeyDisabledWhenEmpty(t *testing.T) {
-	fa := &fakeAppender{}
-	h := RequireAPIKey("", NewHTTPHandler(fa, 0))
-	if w := post(h, `[{"msg":"x"}]`, nil); w.Code != http.StatusAccepted {
-		t.Fatalf("code %d", w.Code)
-	}
-}
+// Authorization middleware lives in internal/auth (see auth.Require tests).

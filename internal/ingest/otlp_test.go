@@ -145,7 +145,7 @@ func TestOTLPAnyValueRendering(t *testing.T) {
 // the wire, including the API-key check.
 func TestOTLPGRPCEndToEnd(t *testing.T) {
 	sa := &syncAppender{}
-	srv, err := StartOTLP(sa, "127.0.0.1:0", "sekret")
+	srv, err := StartOTLP(sa, "127.0.0.1:0", func(cred string) bool { return cred == "sekret" })
 	if err != nil {
 		t.Fatal(err)
 	}

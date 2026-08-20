@@ -5,7 +5,7 @@ http:
   addr: ":9001"
 
 ingest:
-  api_key: ""          # empty = no auth (dev only)
+  api_key: ""          # bootstrap admin API key; empty + no users = open dev mode
   native:
     tcp_addr: ":9999"
     udp_addr: ":9999"
@@ -25,6 +25,17 @@ clickhouse:
 
 graph:
   db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
+
+# Users and roles. With no users and an empty ingest.api_key everything is
+# open (dev mode). Creating the first user — or setting the API key — turns
+# auth on for every surface (HTTP API, UI, OTLP). The API key always maps to
+# an admin identity and doubles as the recovery path. Users sign in with
+# login+password (JWT session) and can issue personal `ldt_...` tokens from
+# the Access tab; roles: member = search/tail/topology, admin = + rules and
+# user management. Manage via the UI or /api/v1/users.
+auth:
+  db_path: "logdoc-users.db"   # SQLite file with users, tokens, JWT secret
+  session_ttl: 24h             # login session lifetime
 
 # Server-side pipelines: parse raw messages into structured fields on ingest,
 # before storage, tail, topology and notifications see the entry. Empty list =

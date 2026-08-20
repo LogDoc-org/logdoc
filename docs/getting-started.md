@@ -174,13 +174,31 @@ curl -X POST localhost:9001/api/v1/notify/rules -d '{
 }'
 ```
 
+## 9. Add your team
+
+Out of the box everything is open — fine on a laptop. To lock it down, set
+`LOGDOC_API_KEY` (the bootstrap admin credential), open the UI, sign in with
+the key and create accounts on the **Access** tab: login, password, role.
+**member** can search, tail and browse the map; **admin** additionally
+manages notification rules and users. Each user issues personal `ldt_...`
+tokens there for scripts and CI — revocable one by one, carrying the user's
+role. Creating the first user turns auth on across the whole surface (API,
+UI, OTLP); the bootstrap key stays valid as the recovery path.
+
+```bash
+# the same over the API
+curl -X POST localhost:9001/api/v1/users -H "X-API-Key: $LOGDOC_API_KEY" \
+  -d '{"login": "alice", "password": "correct horse", "role": "admin"}'
+```
+
 ## Configuration
 
 Precedence: defaults → yaml (`-config` / `LOGDOC_CONFIG`) → env `LOGDOC_*` →
 flags. Every option with its default lives in
 [`logdoc.example.yml`](../logdoc.example.yml).
 
-Auth: set `LOGDOC_API_KEY`; clients pass it as `X-API-Key`,
-`Authorization: Bearer` or `?api_key=`. An empty key = open dev mode.
+Auth: any credential — API key, personal `ldt_...` token or session JWT — is
+passed as `X-API-Key`, `Authorization: Bearer` or `?api_key=`. An empty key
+with no users = open dev mode.
 
 Retention: `clickhouse.ttl_days` (default 30).
