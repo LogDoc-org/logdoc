@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
 import LogsView, { type LogsRequest } from "./LogsView";
 import Topology from "./Topology";
+import Rules from "./Rules";
 
-type View = "logs" | "topology";
+type View = "logs" | "topology" | "rules";
 
 export default function App() {
   const [view, setView] = useState<View>("logs");
@@ -28,6 +29,9 @@ export default function App() {
           >
             Topology
           </button>
+          <button className={view === "rules" ? "tab on" : "tab"} onClick={() => setView("rules")}>
+            Rules
+          </button>
         </nav>
         <span className="muted">v2</span>
       </header>
@@ -36,6 +40,7 @@ export default function App() {
         <LogsView request={logsRequest} />
       </div>
       {view === "topology" && <Topology onOpenLogs={openLogs} />}
+      {view === "rules" && <Rules canEdit />}
     </div>
   );
 }

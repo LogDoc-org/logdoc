@@ -93,8 +93,9 @@ func defaults() Config {
 			FlushInterval: time.Second,
 			TTLDays:       30,
 		},
-		Graph: Graph{DBPath: "logdoc-graph.db"},
-		Log:   Log{Level: "info"},
+		Graph:  Graph{DBPath: "logdoc-graph.db"},
+		Notify: notify.Config{RulesPath: "logdoc-rules.json"},
+		Log:    Log{Level: "info"},
 	}
 }
 

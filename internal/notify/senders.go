@@ -23,6 +23,9 @@ func buildSenders(cfg Config) []Sender {
 	if cfg.Email.SMTPAddr != "" && cfg.Email.From != "" && len(cfg.Email.To) > 0 {
 		out = append(out, &Email{cfg: cfg.Email})
 	}
+	if len(cfg.Kafka.Brokers) > 0 && cfg.Kafka.Topic != "" {
+		out = append(out, newKafka(cfg.Kafka))
+	}
 	return out
 }
 

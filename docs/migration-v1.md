@@ -19,7 +19,7 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 |---|---|
 | Java server (`logdoc/community` image) + PostgreSQL + ClickHouse | one Go binary + ClickHouse |
 | Sink/pipe plugins as jars/`.so` loaded by the server | protocols and notifications built in |
-| Watchdog rules configured in the UI | flat alert rules in yaml (`notify:`) |
+| Watchdog rules with composite conditions | alert rules with nested and/or `match` conditions — `notify:` in yaml or the Rules tab in the UI |
 | Users, roles, per-user tokens | single API key (multi-user later) |
 | Syslog sink plugin (jar) | built-in syslog listener (RFC 3164/5424, TCP+UDP), `ingest.syslog` in config |
 | — | OTLP/gRPC ingest, architecture map, Mermaid export, MCP server |
@@ -28,7 +28,6 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 
 Planned, prioritized by demand — open an issue if one of these blocks you:
 
-- the full watchdog rule language (schedules, composite conditions);
 - a plugin SDK (v2 will use gRPC subprocesses instead of in-process jars);
 - journald ingest, OTLP traces and metrics;
 - RBAC and multi-tenant UI.
@@ -38,7 +37,10 @@ Planned, prioritized by demand — open an issue if one of these blocks you:
 1. Start v2 next to v1 on different ports (`LOGDOC_HTTP_ADDR`,
    `LOGDOC_NATIVE_TCP_ADDR`, ...), or on another host.
 2. Point one appender at v2, verify entries in the UI.
-3. Switch the rest, recreate watchdog rules as `notify:` rules in yaml.
+3. Switch the rest, recreate watchdog rules as `notify:` rules — in yaml or
+   right in the UI (Rules tab). Composite conditions map to `match` with
+   nested `and`/`or`; pipe plugins map to channels (telegram, webhook,
+   email, kafka).
 4. Retire v1 once its retention window has drained.
 
 Historical data is not migrated: log retention is TTL-bounded, so after one

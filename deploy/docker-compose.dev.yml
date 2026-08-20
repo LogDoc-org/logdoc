@@ -24,5 +24,15 @@ services:
       timeout: 3s
       retries: 20
 
+  # Kafka for testing the notification channel: profile `test` only.
+  # docker compose -f deploy/docker-compose.dev.yml --profile test up -d
+  # The image defaults to a single KRaft node advertised as localhost:9092.
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: logdoc-kafka
+    profiles: ["test"]
+    ports:
+      - "9092:9092"
+
 volumes:
   clickhouse-data:

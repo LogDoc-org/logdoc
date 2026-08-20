@@ -13,6 +13,7 @@ package notify
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -25,6 +26,10 @@ type Config struct {
 	Telegram TelegramConfig `yaml:"telegram"`
 	Webhook  WebhookConfig  `yaml:"webhook"`
 	Email    EmailConfig    `yaml:"email"`
+	Kafka    KafkaConfig    `yaml:"kafka"`
+	// RulesPath — the JSON file where rules created through the UI/API
+	// persist across restarts.
+	RulesPath string `yaml:"rules_path"`
 }
 
 type Rule struct {
@@ -37,6 +42,12 @@ type Rule struct {
 	Window    time.Duration `yaml:"window"`    // default 1m (threshold) / 5m (silence)
 	Cooldown  time.Duration `yaml:"cooldown"`  // min pause between fires, default 5m
 	Channels  []string      `yaml:"channels"`  // sender names; empty = all configured
+	// Match replaces the default "lvl >= ERROR (+ app)" condition of
+	// error_threshold with a composite one (see Match).
+	Match *Match `yaml:"match"`
+	// MaxFires limits how many times the rule fires: unset = unlimited,
+	// 0 = once, N = at most N times (the window counter restarts between).
+	MaxFires *int `yaml:"max_fires"`
 }
 
 // Event — a fired rule, the payload every sender receives.
@@ -48,6 +59,28 @@ type Event struct {
 	Window  string    `json:"window"`
 	Ts      time.Time `json:"ts"`
 	Message string    `json:"message"`
+	// Entries — the matched entries behind the fire (error_threshold only,
+	// capped at maxCaptured). Text channels ignore them; webhook and Kafka
+	// deliver them.
+	Entries []EventEntry `json:"entries,omitempty"`
+}
+
+// EventEntry — one matched log entry in the event payload.
+type EventEntry struct {
+	Ts     time.Time         `json:"ts"`
+	App    string            `json:"app"`
+	Src    string            `json:"src,omitempty"`
+	Lvl    string            `json:"lvl"`
+	Pid    string            `json:"pid,omitempty"`
+	Msg    string            `json:"msg"`
+	Fields map[string]string `json:"fields,omitempty"`
+}
+
+func toEventEntry(e model.Entry) EventEntry {
+	return EventEntry{
+		Ts: e.Ts, App: e.App, Src: e.Src, Lvl: e.Lvl.String(),
+		Pid: e.PID, Msg: e.Msg, Fields: e.Fields,
+	}
 }
 
 // Sender delivers an event to one channel.
@@ -65,16 +98,44 @@ const (
 	defaultSilenceWindow = 5 * time.Minute
 	defaultCooldown      = 5 * time.Minute
 	senderTimeout        = 15 * time.Second
+	maxCaptured          = 50 // matched entries kept per rule for the payload
 	TypeErrorThreshold   = "error_threshold"
 	TypeSilence          = "silence"
 )
 
+// captured — a matched entry with its arrival time (for window pruning).
+type captured struct {
+	e  model.Entry
+	at time.Time
+}
+
+const (
+	sourceConfig = "config"
+	sourceUI     = "ui"
+)
+
 type rule struct {
-	Rule            // with defaults applied
-	buckets   []int // ring of per-slot error counts (error_threshold only)
+	Rule             // with defaults applied
+	source    string // sourceConfig | sourceUI
+	match     matchFunc
+	buckets   []int // ring of per-slot match counts (error_threshold only)
 	cur       int
+	entries   []captured // matched entries since the last fire, capped
+	fires     int
+	disabled  bool // max_fires exhausted
 	lastFired time.Time
 	silenced  bool // silence already reported for the current gap
+}
+
+// maxFiresAllowed — how many fires MaxFires permits (see Rule.MaxFires).
+func (r *rule) maxFiresAllowed() int {
+	if r.MaxFires == nil {
+		return -1 // unlimited
+	}
+	if *r.MaxFires <= 0 {
+		return 1 // 0 = once
+	}
+	return *r.MaxFires
 }
 
 // Engine implements ingest.Appender: it observes the stream and never blocks.
@@ -83,68 +144,92 @@ type Engine struct {
 	rules    []rule
 	lastSeen map[string]time.Time // app → wall-clock time of the last entry
 	senders  []Sender
+	byName   map[string]bool // configured sender names
 	now      func() time.Time
 	done     chan struct{}
 	wg       sync.WaitGroup
 }
 
-// New builds the engine, or returns (nil, nil) when no rules are configured.
+// New builds the engine. Nil (and no error) means notifications are off:
+// no rules and no channels configured. With at least one channel the engine
+// runs even without config rules — rules can be added through the API.
 func New(cfg Config) (*Engine, error) {
-	if len(cfg.Rules) == 0 {
+	senders := buildSenders(cfg)
+	if len(cfg.Rules) == 0 && len(senders) == 0 {
 		return nil, nil
 	}
-
-	senders := buildSenders(cfg)
-	byName := map[string]bool{}
-	for _, s := range senders {
-		byName[s.Name()] = true
+	if len(senders) == 0 {
+		return nil, fmt.Errorf("notify: rules configured but no channel (telegram/webhook/email/kafka) is")
 	}
 
 	e := &Engine{
 		lastSeen: map[string]time.Time{},
 		senders:  senders,
+		byName:   map[string]bool{},
 		now:      time.Now,
 		done:     make(chan struct{}),
+	}
+	for _, s := range senders {
+		e.byName[s.Name()] = true
 	}
 	for i, rc := range cfg.Rules {
 		if rc.Name == "" {
 			return nil, fmt.Errorf("notify: rule #%d has no name", i+1)
 		}
-		r := rule{Rule: rc}
-		if r.Cooldown <= 0 {
-			r.Cooldown = defaultCooldown
-		}
-		switch rc.Type {
-		case TypeErrorThreshold:
-			if r.Window <= 0 {
-				r.Window = defaultWindow
-			}
-			if r.Threshold <= 0 {
-				r.Threshold = defaultThreshold
-			}
-			n := int((r.Window + slot - 1) / slot)
-			r.buckets = make([]int, n)
-		case TypeSilence:
-			if rc.App == "" {
-				return nil, fmt.Errorf("notify: silence rule %q requires app", rc.Name)
-			}
-			if r.Window <= 0 {
-				r.Window = defaultSilenceWindow
-			}
-		default:
-			return nil, fmt.Errorf("notify: rule %q: unknown type %q", rc.Name, rc.Type)
-		}
-		for _, ch := range rc.Channels {
-			if !byName[ch] {
-				return nil, fmt.Errorf("notify: rule %q references unconfigured channel %q", rc.Name, ch)
-			}
+		r, err := e.buildRule(rc, sourceConfig)
+		if err != nil {
+			return nil, err
 		}
 		e.rules = append(e.rules, r)
 	}
-	if len(senders) == 0 {
-		return nil, fmt.Errorf("notify: rules configured but no channel (telegram/webhook/email) is")
-	}
 	return e, nil
+}
+
+// buildRule validates a rule, applies the defaults and compiles the match.
+func (e *Engine) buildRule(rc Rule, source string) (rule, error) {
+	if rc.Name == "" {
+		return rule{}, fmt.Errorf("notify: rule has no name")
+	}
+	r := rule{Rule: rc, source: source}
+	if r.Cooldown <= 0 {
+		r.Cooldown = defaultCooldown
+	}
+	switch rc.Type {
+	case TypeErrorThreshold:
+		if r.Window <= 0 {
+			r.Window = defaultWindow
+		}
+		if r.Threshold <= 0 {
+			r.Threshold = defaultThreshold
+		}
+		n := int((r.Window + slot - 1) / slot)
+		r.buckets = make([]int, n)
+		if rc.Match != nil {
+			f, err := compileMatch(rc.Match, fmt.Sprintf("notify: rule %q: match", rc.Name))
+			if err != nil {
+				return rule{}, err
+			}
+			r.match = f
+		}
+	case TypeSilence:
+		if rc.App == "" {
+			return rule{}, fmt.Errorf("notify: silence rule %q requires app", rc.Name)
+		}
+		if rc.Match != nil {
+			return rule{}, fmt.Errorf("notify: rule %q: match is only supported for %s rules", rc.Name, TypeErrorThreshold)
+		}
+		if r.Window <= 0 {
+			r.Window = defaultSilenceWindow
+		}
+	default:
+		return rule{}, fmt.Errorf("notify: rule %q: unknown type %q", rc.Name, rc.Type)
+	}
+	for _, ch := range rc.Channels {
+		if !e.byName[ch] {
+			return rule{}, fmt.Errorf("notify: rule %q references unconfigured channel %q", rc.Name, ch)
+		}
+	}
+	return r, nil
 }
 
 // Append observes one entry. Counter bumps under a mutex only — safe on the hot path.
@@ -155,9 +240,22 @@ func (e *Engine) Append(entry model.Entry) {
 	e.lastSeen[entry.App] = now
 	for i := range e.rules {
 		r := &e.rules[i]
-		if r.Type == TypeErrorThreshold && entry.Lvl >= model.LevelError &&
-			(r.App == "" || r.App == entry.App) {
+		if r.Type != TypeErrorThreshold || r.disabled {
+			continue
+		}
+		matched := false
+		if r.match != nil {
+			matched = r.match(entry)
+		} else {
+			matched = entry.Lvl >= model.LevelError && (r.App == "" || r.App == entry.App)
+		}
+		if matched {
 			r.buckets[r.cur]++
+			if len(r.entries) == maxCaptured {
+				copy(r.entries, r.entries[1:])
+				r.entries = r.entries[:maxCaptured-1]
+			}
+			r.entries = append(r.entries, captured{e: entry, at: now})
 		}
 	}
 }
@@ -182,10 +280,18 @@ func (e *Engine) Start() {
 	}()
 }
 
-// Close stops the loop and waits for in-flight sends.
+// Close stops the loop, waits for in-flight sends and closes the senders
+// that hold connections (Kafka).
 func (e *Engine) Close() {
 	close(e.done)
 	e.wg.Wait()
+	for _, s := range e.senders {
+		if c, ok := s.(io.Closer); ok {
+			if err := c.Close(); err != nil {
+				slog.Warn("notification channel close failed", "channel", s.Name(), "err", err)
+			}
+		}
+	}
 }
 
 // fire — an event plus the channels of the rule that produced it.
@@ -201,14 +307,22 @@ func (e *Engine) tick(now time.Time) []fire {
 	var fires []fire
 	for i := range e.rules {
 		r := &e.rules[i]
+		if r.disabled {
+			continue
+		}
 		switch r.Type {
 		case TypeErrorThreshold:
+			// Expire captured entries that slid out of the window.
+			cut := now.Add(-r.Window)
+			for len(r.entries) > 0 && r.entries[0].at.Before(cut) {
+				r.entries = r.entries[1:]
+			}
 			sum := 0
 			for _, b := range r.buckets {
 				sum += b
 			}
 			if sum >= r.Threshold && now.Sub(r.lastFired) >= r.Cooldown {
-				fires = append(fires, fire{ev: Event{
+				ev := Event{
 					Rule:    r.Name,
 					Type:    r.Type,
 					App:     r.App,
@@ -216,11 +330,18 @@ func (e *Engine) tick(now time.Time) []fire {
 					Window:  r.Window.String(),
 					Ts:      now,
 					Message: thresholdMessage(r.Name, r.App, sum, r.Window),
-				}, channels: r.Channels})
+					Entries: make([]EventEntry, len(r.entries)),
+				}
+				for j, c := range r.entries {
+					ev.Entries[j] = toEventEntry(c.e)
+				}
+				fires = append(fires, fire{ev: ev, channels: r.Channels})
 				r.lastFired = now
+				r.entries = nil
 				for j := range r.buckets {
 					r.buckets[j] = 0
 				}
+				e.countFire(r)
 			}
 			r.cur = (r.cur + 1) % len(r.buckets)
 			r.buckets[r.cur] = 0
@@ -242,10 +363,20 @@ func (e *Engine) tick(now time.Time) []fire {
 				}, channels: r.Channels})
 				r.silenced = true
 				r.lastFired = now
+				e.countFire(r)
 			}
 		}
 	}
 	return fires
+}
+
+// countFire bumps the rule's fire counter and retires it when max_fires
+// is exhausted.
+func (e *Engine) countFire(r *rule) {
+	r.fires++
+	if allowed := r.maxFiresAllowed(); allowed >= 0 && r.fires >= allowed {
+		r.disabled = true
+	}
 }
 
 func thresholdMessage(name, app string, count int, window time.Duration) string {

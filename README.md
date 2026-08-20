@@ -101,24 +101,41 @@ Built-in alert rules run over the live stream — no query polling:
 - **error_threshold** — N entries with level ≥ ERROR within a sliding window;
 - **silence** — a service that used to log stopped logging.
 
+An `error_threshold` rule can carry a composite `match` condition instead of
+the default "level ≥ ERROR": nested `and`/`or`, exact `app`/`src`/`pid`,
+minimum `lvl`, string ops on the message (`contains`/`starts`/`ends`/`equals`,
+case-insensitive by default), an RE2 `regex`, and the same ops on parsed
+`key=value` fields. `max_fires` retires a rule after N alerts (`0` = fire
+once). Alerts include the matched log entries.
+
 Events go to Telegram, a webhook (JSON POST — the integration point for
-everything else) and/or email. Configure in `logdoc.yml`:
+everything else), email and/or a Kafka topic. Configure in `logdoc.yml`:
 
 ```yaml
 notify:
   rules:
-    - name: billing error burst
-      type: error_threshold
-      app: billing
-      threshold: 10
-      window: 1m
     - name: web went silent
       type: silence
       app: web
       window: 5m
+    - name: billing cascade
+      type: error_threshold
+      threshold: 2
+      window: 1m
+      match:
+        app: billing
+        or:
+          - lvl: ERROR
+          - msg: { contains: "pool exhausted" }
   telegram: { token: "...", chat_ids: [123456789] }
   webhook:  { url: "https://example.com/hook" }
+  kafka:    { brokers: ["localhost:9092"], topic: "logdoc-alerts" }
 ```
+
+Rules also live in the UI: the **Rules** tab lists every rule with live fire
+counters and lets you create, edit and delete rules at runtime (persisted
+server-side; config-file rules are read-only there). The same works over
+`GET`/`POST`/`DELETE /api/v1/notify/rules`.
 
 See `logdoc.example.yml` for every option.
 

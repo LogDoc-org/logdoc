@@ -118,6 +118,10 @@ func run(args []string) error {
 		defer notifier.Close() // wait for in-flight notifications
 		logger.Info("notifications enabled", "rules", len(cfg.Notify.Rules))
 	}
+	rulesAPI, err := notify.NewRulesAPI(notifier, cfg.Notify.RulesPath)
+	if err != nil {
+		return fmt.Errorf("notify rules file: %w", err)
+	}
 
 	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
@@ -142,6 +146,12 @@ func run(args []string) error {
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDiffHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDeploysHandler(manager)))
+	// Rules CRUD; registered per method so the catch-all "GET /" UI route
+	// stays valid.
+	for _, m := range []string{"GET", "POST", "DELETE"} {
+		mux.Handle(m+" /api/v1/notify/rules", ingest.RequireAPIKey(cfg.Ingest.APIKey, rulesAPI.Handler()))
+	}
+
 	// Agent interface: MCP over Streamable HTTP (query_logs, get_topology,
 	// get_topology_diff, get_service_card). The transport uses GET/POST/DELETE;
 	// each method is registered separately so the catch-all "GET /" UI route

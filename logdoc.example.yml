@@ -27,10 +27,13 @@ graph:
   db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
 
 # Built-in notifications: rules over the live stream, fanned out to channels.
-# No rules = the whole block is off. A rule with no `channels` uses every
-# configured channel.
+# No rules and no channels = the whole block is off. With at least one channel
+# configured, rules can also be created at runtime from the UI (Rules tab) or
+# via POST /api/v1/notify/rules; those persist in `rules_path`. A rule with no
+# `channels` uses every configured channel.
 notify:
   rules: []
+  rules_path: "logdoc-rules.json"  # where UI-created rules are stored
   # rules:
   #   - name: billing error burst
   #     type: error_threshold      # N entries with lvl >= ERROR in the window
@@ -38,11 +41,24 @@ notify:
   #     threshold: 10              # default 10
   #     window: 1m                 # default 1m
   #     cooldown: 5m               # min pause between alerts, default 5m
+  #     max_fires: 3               # optional: retire after N alerts (0 = fire once)
   #     channels: [telegram, webhook]
   #   - name: web went silent
   #     type: silence              # the app logged before, then stopped
   #     app: web                   # required for silence rules
   #     window: 5m                 # default 5m
+  #   - name: billing cascade      # a composite condition instead of "lvl >= ERROR":
+  #     type: error_threshold      # count entries matching `match` in the window
+  #     threshold: 2
+  #     window: 1m
+  #     match:                     # one node = AND of its fields; nest and:/or: freely
+  #       app: billing             # exact app (also: src, pid)
+  #       or:
+  #         - lvl: ERROR           # minimum level
+  #         - msg: {contains: "pool exhausted"}   # also: starts/ends/equals,
+  #                                               # case_sensitive: true
+  #         - regex: "timeout after \\d+ms"       # RE2 over msg
+  #         - fields: {peer: {equals: db}}        # ops on parsed key=value fields
   # telegram:
   #   token: "123456:ABC..."      # or env LOGDOC_TELEGRAM_TOKEN
   #   chat_ids: [123456789]
@@ -54,6 +70,9 @@ notify:
   #   to: ["oncall@example.com"]
   #   username: "logdoc@example.com"
   #   password: ""                # or env LOGDOC_SMTP_PASSWORD
+  # kafka:
+  #   brokers: ["localhost:9092"]
+  #   topic: "logdoc-alerts"      # JSON: {rule, type, message, entries[], server_time}
 
 log:
   level: "info"

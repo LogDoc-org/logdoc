@@ -6,6 +6,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
 	github.com/coder/websocket v1.8.15
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/segmentio/kafka-go v0.4.51
 	go.opentelemetry.io/proto/otlp v1.11.0
 	google.golang.org/grpc v1.83.0
 	gopkg.in/yaml.v3 v3.0.1

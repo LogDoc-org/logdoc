@@ -127,8 +127,23 @@ the error edges and reads the logs itself.
 ## 7. Alerts
 
 Two rule kinds evaluated on the live stream: an error burst and a service
-going silent. Delivery: Telegram, webhook, email. See the `notify` section
-of [`logdoc.example.yml`](../logdoc.example.yml).
+going silent. An error rule can carry a composite `match` condition — nested
+`and`/`or` over app/level/message/fields, with substring, prefix/suffix and
+regex operators. Delivery: Telegram, webhook, email, Kafka. See the `notify`
+section of [`logdoc.example.yml`](../logdoc.example.yml).
+
+Once at least one channel is configured, manage rules from the **Rules** tab
+in the UI — every rule with live fire counters, create/edit/delete at runtime
+— or over the API:
+
+```bash
+curl -X POST localhost:9001/api/v1/notify/rules -d '{
+  "name": "billing cascade", "type": "error_threshold",
+  "threshold": 2, "window": "1m",
+  "match": {"app": "billing",
+            "or": [{"lvl": "ERROR"}, {"msg": {"contains": "pool exhausted"}}]}
+}'
+```
 
 ## Configuration
 

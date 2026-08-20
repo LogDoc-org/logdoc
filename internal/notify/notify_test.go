@@ -195,3 +195,123 @@ webhook:
 		t.Fatal("bad duration must be rejected")
 	}
 }
+
+func TestThresholdWithCompositeMatch(t *testing.T) {
+	start := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	// The parity example: app=billing AND (lvl>=ERROR OR msg contains "pool exhausted").
+	e, advance := newTestEngine(t, []Rule{{
+		Name:      "billing cascade",
+		Type:      TypeErrorThreshold,
+		Threshold: 2,
+		Window:    time.Minute,
+		Match: &Match{
+			App: "billing",
+			Or: []Match{
+				{Lvl: "ERROR"},
+				{Msg: &Cond{Contains: "pool exhausted"}},
+			},
+		},
+	}}, start)
+
+	// Noise: wrong app, low level without the phrase.
+	e.Append(model.Entry{App: "api", Lvl: model.LevelError, Msg: "boom"})
+	e.Append(model.Entry{App: "billing", Lvl: model.LevelInfo, Msg: "charge ok"})
+	if fires := e.tick(advance(slot)); len(fires) != 0 {
+		t.Fatalf("noise fired: %+v", fires)
+	}
+
+	// Two matches through different branches of the OR.
+	e.Append(model.Entry{App: "billing", Lvl: model.LevelError, Msg: "charge failed"})
+	e.Append(model.Entry{App: "billing", Lvl: model.LevelInfo, Msg: "pgx: pool exhausted"})
+	fires := e.tick(advance(slot))
+	if len(fires) != 1 {
+		t.Fatalf("want 1 fire, got %d", len(fires))
+	}
+	ev := fires[0].ev
+	if ev.Count != 2 || len(ev.Entries) != 2 {
+		t.Fatalf("event: %+v", ev)
+	}
+	if ev.Entries[0].Msg != "charge failed" || ev.Entries[1].Msg != "pgx: pool exhausted" {
+		t.Fatalf("entries: %+v", ev.Entries)
+	}
+	if ev.Entries[0].Lvl != "ERROR" {
+		t.Fatalf("entry level: %+v", ev.Entries[0])
+	}
+}
+
+func TestMaxFires(t *testing.T) {
+	start := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	once := 0
+	e, advance := newTestEngine(t, []Rule{{
+		Name:      "one-shot",
+		Type:      TypeErrorThreshold,
+		Threshold: 1,
+		Window:    time.Minute,
+		Cooldown:  slot, // fire as often as the ticks allow
+		MaxFires:  &once,
+	}}, start)
+
+	e.Append(entry("a", model.LevelError))
+	if fires := e.tick(advance(slot)); len(fires) != 1 {
+		t.Fatalf("want the single fire, got %d", len(fires))
+	}
+	// Keeps erroring, but max_fires: 0 means once.
+	for i := 0; i < 10; i++ {
+		e.Append(entry("a", model.LevelError))
+		if fires := e.tick(advance(slot)); len(fires) != 0 {
+			t.Fatalf("fired again after max_fires: %+v", fires)
+		}
+	}
+}
+
+func TestMaxFiresN(t *testing.T) {
+	start := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	two := 2
+	e, advance := newTestEngine(t, []Rule{{
+		Name:      "twice",
+		Type:      TypeErrorThreshold,
+		Threshold: 1,
+		Window:    time.Minute,
+		Cooldown:  slot,
+		MaxFires:  &two,
+	}}, start)
+
+	got := 0
+	for i := 0; i < 6; i++ {
+		e.Append(entry("a", model.LevelError))
+		got += len(e.tick(advance(slot)))
+	}
+	if got != 2 {
+		t.Fatalf("want exactly 2 fires, got %d", got)
+	}
+}
+
+func TestCapturedEntriesExpireWithWindow(t *testing.T) {
+	start := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	e, advance := newTestEngine(t, []Rule{{
+		Name:      "err",
+		Type:      TypeErrorThreshold,
+		Threshold: 2,
+		Window:    30 * time.Second,
+	}}, start)
+
+	// An early error slides out of the window along with its capture.
+	e.Append(model.Entry{App: "a", Lvl: model.LevelError, Msg: "old"})
+	e.tick(advance(slot))
+	e.tick(advance(slot))
+	e.tick(advance(slot))
+	e.Append(model.Entry{App: "a", Lvl: model.LevelError, Msg: "new one"})
+	e.Append(model.Entry{App: "a", Lvl: model.LevelError, Msg: "new two"})
+	fires := e.tick(advance(slot))
+	if len(fires) != 1 {
+		t.Fatalf("want 1 fire, got %d", len(fires))
+	}
+	for _, en := range fires[0].ev.Entries {
+		if en.Msg == "old" {
+			t.Fatalf("expired entry leaked into the payload: %+v", fires[0].ev.Entries)
+		}
+	}
+	if len(fires[0].ev.Entries) != 2 {
+		t.Fatalf("entries: %+v", fires[0].ev.Entries)
+	}
+}
