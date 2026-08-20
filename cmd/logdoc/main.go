@@ -21,6 +21,7 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/mcpserver"
 	"github.com/LogDoc-org/logdoc/internal/model"
 	"github.com/LogDoc-org/logdoc/internal/notify"
+	"github.com/LogDoc-org/logdoc/internal/pipeline"
 	"github.com/LogDoc-org/logdoc/internal/query"
 	"github.com/LogDoc-org/logdoc/internal/selflog"
 	"github.com/LogDoc-org/logdoc/internal/storage"
@@ -123,6 +124,16 @@ func run(args []string) error {
 		return fmt.Errorf("notify rules file: %w", err)
 	}
 
+	// Pipelines process entries before every consumer (storage, tail,
+	// topology, notifications). Self-logs bypass them deliberately.
+	var stream ingest.Appender = sink
+	if pl, err := pipeline.New(cfg.Pipelines, sink); err != nil {
+		return err
+	} else if pl != nil {
+		stream = pl
+		logger.Info("pipelines enabled", "count", len(cfg.Pipelines))
+	}
+
 	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
 	slog.SetDefault(logger)
@@ -133,7 +144,7 @@ func run(args []string) error {
 		_, _ = fmt.Fprintf(w, `{"status":"ok","version":%q}`, version)
 	})
 	mux.Handle("POST /api/v1/ingest",
-		ingest.RequireAPIKey(cfg.Ingest.APIKey, ingest.NewHTTPHandler(sink, 0)))
+		ingest.RequireAPIKey(cfg.Ingest.APIKey, ingest.NewHTTPHandler(stream, 0)))
 	mux.Handle("GET /api/v1/query",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, query.NewHTTPHandler(store, store)))
 	mux.Handle("GET /api/v1/tail",
@@ -168,17 +179,17 @@ func run(args []string) error {
 	}
 	mux.Handle("GET /", spaHandler(uiFS))
 
-	native, err := ingest.StartNative(sink, cfg.Ingest.Native.TCPAddr, cfg.Ingest.Native.UDPAddr)
+	native, err := ingest.StartNative(stream, cfg.Ingest.Native.TCPAddr, cfg.Ingest.Native.UDPAddr)
 	if err != nil {
 		return fmt.Errorf("native listeners: %w", err)
 	}
 
-	syslogSrv, err := ingest.StartSyslog(sink, cfg.Ingest.Syslog.TCPAddr, cfg.Ingest.Syslog.UDPAddr)
+	syslogSrv, err := ingest.StartSyslog(stream, cfg.Ingest.Syslog.TCPAddr, cfg.Ingest.Syslog.UDPAddr)
 	if err != nil {
 		return fmt.Errorf("syslog listeners: %w", err)
 	}
 
-	otlp, err := ingest.StartOTLP(sink, cfg.Ingest.OTLP.GRPCAddr, cfg.Ingest.APIKey)
+	otlp, err := ingest.StartOTLP(stream, cfg.Ingest.OTLP.GRPCAddr, cfg.Ingest.APIKey)
 	if err != nil {
 		return fmt.Errorf("otlp listener: %w", err)
 	}

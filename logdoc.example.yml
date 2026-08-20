@@ -26,6 +26,41 @@ clickhouse:
 graph:
   db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
 
+# Server-side pipelines: parse raw messages into structured fields on ingest,
+# before storage, tail, topology and notifications see the entry. Empty list =
+# off. Each pipeline: an optional `when` selector (app / src / msg_regex, all
+# set fields must match) and ordered `steps`, each exactly one of:
+#   grok:     '%{PATTERN:field} ...'  — grok patterns → fields (COMBINEDAPACHELOG,
+#             IPORHOST, TIMESTAMP_ISO8601, LOGLEVEL, NUMBER, ...); no match = no-op
+#   regex:    RE2 with (?P<name>...) named groups → fields
+#   json:     {} — parse a JSON message into fields (nested keys dot-flattened);
+#             top-level "message"/"msg" replaces the message, "level" sets the level
+#   severity: derive the entry level from a field (first matching rule wins;
+#             without rules the value is parsed as a level name: info/warning/fatal/...)
+#   set:      rewrite app/src/pid/msg/lvl or add fields; "$name" reads a field
+#   drop:     true — discard the entry
+pipelines: []
+# pipelines:
+#   - name: nginx access
+#     when: {app: nginx}
+#     steps:
+#       - grok: '%{COMBINEDAPACHELOG} upstream=%{WORD:upstream}'
+#       - severity:
+#           from: response
+#           rules:
+#             - {prefix: "5", lvl: ERROR}
+#             - {prefix: "4", lvl: WARN}
+#             - {lvl: INFO}            # catch-all
+#       - set:
+#           src: access
+#           fields: {peer.service: $upstream}   # puts nginx→upstream on the map
+#   - name: json services
+#     when: {src: docker}
+#     steps: [{json: {}}]
+#   - name: drop health checks
+#     when: {msg_regex: 'GET /(healthz|ping) '}
+#     steps: [{drop: true}]
+
 # Built-in notifications: rules over the live stream, fanned out to channels.
 # No rules and no channels = the whole block is off. With at least one channel
 # configured, rules can also be created at runtime from the UI (Rules tab) or

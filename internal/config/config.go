@@ -11,15 +11,17 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/LogDoc-org/logdoc/internal/notify"
+	"github.com/LogDoc-org/logdoc/internal/pipeline"
 )
 
 type Config struct {
-	HTTP       HTTP          `yaml:"http"`
-	Ingest     Ingest        `yaml:"ingest"`
-	ClickHouse ClickHouse    `yaml:"clickhouse"`
-	Graph      Graph         `yaml:"graph"`
-	Notify     notify.Config `yaml:"notify"`
-	Log        Log           `yaml:"log"`
+	HTTP       HTTP                `yaml:"http"`
+	Ingest     Ingest              `yaml:"ingest"`
+	ClickHouse ClickHouse          `yaml:"clickhouse"`
+	Graph      Graph               `yaml:"graph"`
+	Pipelines  []pipeline.Pipeline `yaml:"pipelines"`
+	Notify     notify.Config       `yaml:"notify"`
+	Log        Log                 `yaml:"log"`
 }
 
 type Graph struct {

@@ -79,7 +79,36 @@ The same over HTTP:
 curl 'localhost:9001/api/v1/query?app=demo&lvl=ERROR,SEVERE&q=timeout&from=2026-08-19T00:00:00Z&limit=100'
 ```
 
-## 5. The map
+## 5. Structure raw logs (pipelines)
+
+If a service emits raw text (nginx, anything legacy), server-side pipelines
+parse it on ingest — before search, tail, the map and alerts see the entry.
+In `logdoc.yml`:
+
+```yaml
+pipelines:
+  - name: nginx access
+    when: { app: nginx }
+    steps:
+      - grok: '%{COMBINEDAPACHELOG} upstream=%{WORD:upstream}'
+      - severity:
+          from: response
+          rules:
+            - { prefix: "5", lvl: ERROR }
+            - { prefix: "4", lvl: WARN }
+            - { lvl: INFO }
+      - set:
+          fields: { peer.service: $upstream }
+```
+
+One raw access line in — a structured entry out: `clientip`, `request`,
+`response` and friends become searchable fields, a `502` becomes a real
+`ERROR`, and `peer.service` puts the nginx→upstream edge on the map. Other
+steps: `regex` (RE2 named groups), `json` (JSON messages → fields), `drop`
+(discard noise like health checks). See the `pipelines` section of
+[`logdoc.example.yml`](../logdoc.example.yml).
+
+## 6. The map
 
 Send logs from two or more services that share a `trace_id` (or
 `correlation_id`, or peer fields like `peer.service`) and open the
@@ -111,7 +140,7 @@ Export the current architecture for your docs:
 curl 'localhost:9001/api/v1/topology/export?format=mermaid'
 ```
 
-## 6. Let an agent in (MCP)
+## 7. Let an agent in (MCP)
 
 LogDoc is an MCP server — `query_logs`, `get_topology`, `get_topology_diff`,
 `get_service_card` over Streamable HTTP:
@@ -124,7 +153,7 @@ claude mcp add --transport http logdoc http://localhost:9001/mcp \
 Then ask: *"why is checkout failing?"* — the agent walks the map, follows
 the error edges and reads the logs itself.
 
-## 7. Alerts
+## 8. Alerts
 
 Two rule kinds evaluated on the live stream: an error burst and a service
 going silent. An error rule can carry a composite `match` condition — nested

@@ -22,6 +22,7 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 | Watchdog rules with composite conditions | alert rules with nested and/or `match` conditions — `notify:` in yaml or the Rules tab in the UI |
 | Users, roles, per-user tokens | single API key (multi-user later) |
 | Syslog sink plugin (jar) | built-in syslog listener (RFC 3164/5424, TCP+UDP), `ingest.syslog` in config |
+| Parsing in the file-watchers agent only | server-side `pipelines:` — grok/regex/json parsing, severity mapping, rewrites and drops on ingest, whatever the source |
 | — | OTLP/gRPC ingest, architecture map, Mermaid export, MCP server |
 
 ## What v2 does not have yet

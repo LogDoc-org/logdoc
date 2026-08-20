@@ -94,6 +94,39 @@ Above (2× speed): a single prompt, no human input — the agent walks the
 topology, follows one `trace_id` across four services and lands on the root
 cause: a bad `billing` deploy exhausting the postgres connection pool.
 
+## Pipelines: structure on ingest
+
+Server-side pipelines parse raw messages into structured fields the moment
+they arrive — before storage, search, live tail, the topology extractor and
+alert rules see the entry. A raw nginx access line becomes queryable fields,
+gets its real severity, and puts the upstream service on the map:
+
+```yaml
+pipelines:
+  - name: nginx access
+    when: { app: nginx }
+    steps:
+      - grok: '%{COMBINEDAPACHELOG} upstream=%{WORD:upstream}'
+      - severity:
+          from: response
+          rules:
+            - { prefix: "5", lvl: ERROR }
+            - { prefix: "4", lvl: WARN }
+            - { lvl: INFO }
+      - set:
+          fields: { peer.service: $upstream }   # nginx→upstream edge on the map
+  - name: drop health checks
+    when: { msg_regex: 'GET /healthz ' }
+    steps: [{ drop: true }]
+```
+
+Steps: `grok` (built-in pattern library, no external dependency), `regex`
+(RE2 named groups), `json` (JSON messages → dot-flattened fields, honoring
+`message`/`level` keys), `severity` (level from a field value or from level
+names like `warning`/`fatal`), `set` (rewrite `app`/`src`/`pid`/`msg`/`lvl`
+or add fields, `$name` references), `drop`. A `when` selector limits a
+pipeline by `app`, `src` or `msg_regex`. See `logdoc.example.yml`.
+
 ## Notifications
 
 Built-in alert rules run over the live stream — no query polling:
