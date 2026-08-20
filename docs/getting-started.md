@@ -93,6 +93,10 @@ deploy/demo-traffic.sh     # three services, one calls another
 deploy/demo-incident.sh    # adds a database failure cascading through them
 ```
 
+Deploys are detected from the logs too: log a `version` field (or a message
+like `deploy billing 2.3.1`) and the version change appears on the service
+card in the Topology tab — next to whatever happened right after it.
+
 Export the current architecture for your docs:
 
 ```bash

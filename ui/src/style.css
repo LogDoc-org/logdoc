@@ -366,6 +366,9 @@ a.winbtn { text-decoration: none; }
 .kv b { font-weight: 600; font-family: var(--mono); }
 .kv b.bad { color: #f53e3e; }
 .topo-links { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.topo-deploys { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.topo-deploys > .muted { font-size: 11px; margin-bottom: 2px; }
+.topo-deploys .kv span.accent { color: var(--accent); font-family: var(--mono); }
 .topo-link {
   font-family: var(--mono);
   font-size: 12px;

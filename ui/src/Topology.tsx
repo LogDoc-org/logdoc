@@ -35,6 +35,8 @@ type SimNode = ApiNode & {
 
 type Selection = { kind: "node"; app: string } | { kind: "edge"; src: string; dst: string } | null;
 
+type ApiDeploy = { app: string; version: string; ts: string };
+
 const ACCENT = "#e35b28";
 const BAD = "#ff4f4f"; // alarm red, deliberately far from the accent orange
 const BAD_RATE = 0.05; // error rate above which a node/edge is drawn as failing
@@ -60,6 +62,7 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
   const dragRef = useRef<{ mode: "pan" | "node"; app?: string; sx: number; sy: number } | null>(null);
 
   const [selection, setSelection] = useState<Selection>(null);
+  const [deploys, setDeploys] = useState<ApiDeploy[]>([]);
   const [win, setWin] = useState("5m");
   const [error, setError] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
@@ -112,6 +115,26 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
     const iv = setInterval(load, 10000);
     return () => clearInterval(iv);
   }, [load]);
+
+  // Deploy markers for the selected service (last 24h).
+  useEffect(() => {
+    if (selection?.kind !== "node") {
+      setDeploys([]);
+      return;
+    }
+    let dead = false;
+    fetch(`/api/v1/deploys?app=${encodeURIComponent(selection.app)}&window=24h&limit=5${apiKeyParam()}`)
+      .then((res) => (res.ok ? res.json() : { deploys: [] }))
+      .then((data: { deploys: ApiDeploy[] }) => {
+        if (!dead) setDeploys(data.deploys);
+      })
+      .catch(() => {
+        if (!dead) setDeploys([]);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [selection]);
 
   // Simulation + rendering loop.
   useEffect(() => {
@@ -522,6 +545,17 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
               <span>last seen</span>
               <b>{new Date(selNode.last_seen).toLocaleString()}</b>
             </div>
+            {deploys.length > 0 && (
+              <div className="topo-deploys">
+                <div className="muted">deploys (24h)</div>
+                {deploys.map((d) => (
+                  <div key={`${d.version}-${d.ts}`} className="kv">
+                    <span className="accent">{d.version}</span>
+                    <b>{new Date(d.ts).toLocaleTimeString()}</b>
+                  </div>
+                ))}
+              </div>
+            )}
             {nodeEdges.length > 0 && (
               <div className="topo-links">
                 {nodeEdges.map((e) => (

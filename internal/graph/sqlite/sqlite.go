@@ -58,7 +58,14 @@ CREATE TABLE IF NOT EXISTS edges (
 	total_count  INTEGER NOT NULL DEFAULT 0,
 	total_errors INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (tenant_id, src, dst)
-);`)
+);
+CREATE TABLE IF NOT EXISTS deploys (
+	tenant_id TEXT    NOT NULL,
+	app       TEXT    NOT NULL,
+	version   TEXT    NOT NULL,
+	ts        INTEGER NOT NULL -- unix milliseconds
+);
+CREATE INDEX IF NOT EXISTS deploys_app_ts ON deploys (tenant_id, app, ts DESC);`)
 	if err != nil {
 		return fmt.Errorf("sqlite migrate: %w", err)
 	}
@@ -156,6 +163,68 @@ func (s *Store) Topology(ctx context.Context, tenantID string) (graph.Topology, 
 		topo.Edges = append(topo.Edges, e)
 	}
 	return topo, erows.Err()
+}
+
+// InsertDeploys appends deploy markers. A marker whose version equals the
+// latest stored version of the same app is skipped — this makes detection
+// restart-safe (the in-memory last-version map starts empty on boot).
+func (s *Store) InsertDeploys(ctx context.Context, tenantID string, deploys []graph.Deploy) error {
+	if len(deploys) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("deploys insert begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, d := range deploys {
+		var latest sql.NullString
+		err := tx.QueryRowContext(ctx,
+			`SELECT version FROM deploys WHERE tenant_id = ? AND app = ?
+			 ORDER BY ts DESC LIMIT 1`, tenantID, d.App).Scan(&latest)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("deploys latest %s: %w", d.App, err)
+		}
+		if latest.Valid && latest.String == d.Version {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO deploys (tenant_id, app, version, ts) VALUES (?, ?, ?, ?)`,
+			tenantID, d.App, d.Version, d.Ts.UnixMilli()); err != nil {
+			return fmt.Errorf("deploys insert %s: %w", d.App, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// Deploys returns markers newest-first; empty app = all apps of the tenant.
+func (s *Store) Deploys(ctx context.Context, tenantID, app string, since time.Time, limit int) ([]graph.Deploy, error) {
+	q := `SELECT app, version, ts FROM deploys WHERE tenant_id = ? AND ts >= ?`
+	args := []any{tenantID, since.UnixMilli()}
+	if app != "" {
+		q += ` AND app = ?`
+		args = append(args, app)
+	}
+	q += ` ORDER BY ts DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("deploys query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []graph.Deploy
+	for rows.Next() {
+		var d graph.Deploy
+		var ms int64
+		if err := rows.Scan(&d.App, &d.Version, &ms); err != nil {
+			return nil, err
+		}
+		d.Ts = time.UnixMilli(ms)
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) Close() error {

@@ -167,3 +167,81 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 		t.Errorf("state lost across reopen: %+v", topo.Nodes)
 	}
 }
+
+func TestDeploysInsertAndDedup(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	t0 := time.UnixMilli(1000)
+	t1 := time.UnixMilli(2000)
+	t2 := time.UnixMilli(3000)
+
+	err := s.InsertDeploys(ctx, "default", []graph.Deploy{
+		{App: "billing", Version: "2.3.0", Ts: t0},
+		{App: "billing", Version: "2.3.1", Ts: t1},
+	})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	// Restart-safe dedup: re-detecting the current version is a no-op.
+	err = s.InsertDeploys(ctx, "default", []graph.Deploy{
+		{App: "billing", Version: "2.3.1", Ts: t2},
+	})
+	if err != nil {
+		t.Fatalf("dedup insert: %v", err)
+	}
+
+	got, err := s.Deploys(ctx, "default", "billing", time.UnixMilli(0), 10)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("deploys: got %d want 2 (%+v)", len(got), got)
+	}
+	// Newest first.
+	if got[0].Version != "2.3.1" || got[1].Version != "2.3.0" {
+		t.Fatalf("order: %+v", got)
+	}
+	if !got[0].Ts.Equal(t1) {
+		t.Fatalf("ts: %v", got[0].Ts)
+	}
+
+	// A rollback to an older version is a new marker again.
+	err = s.InsertDeploys(ctx, "default", []graph.Deploy{
+		{App: "billing", Version: "2.3.0", Ts: t2},
+	})
+	if err != nil {
+		t.Fatalf("rollback insert: %v", err)
+	}
+	got, _ = s.Deploys(ctx, "default", "billing", time.UnixMilli(0), 10)
+	if len(got) != 3 || got[0].Version != "2.3.0" {
+		t.Fatalf("rollback: %+v", got)
+	}
+}
+
+func TestDeploysFilters(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	err := s.InsertDeploys(ctx, "default", []graph.Deploy{
+		{App: "api", Version: "1.0.0", Ts: time.UnixMilli(1000)},
+		{App: "web", Version: "4.2.0", Ts: time.UnixMilli(5000)},
+	})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// since filter
+	got, err := s.Deploys(ctx, "default", "", time.UnixMilli(2000), 10)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(got) != 1 || got[0].App != "web" {
+		t.Fatalf("since filter: %+v", got)
+	}
+
+	// tenant isolation
+	got, _ = s.Deploys(ctx, "other", "", time.UnixMilli(0), 10)
+	if len(got) != 0 {
+		t.Fatalf("tenant leak: %+v", got)
+	}
+}

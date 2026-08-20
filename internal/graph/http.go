@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/LogDoc-org/logdoc/internal/model"
@@ -45,6 +46,43 @@ func NewHTTPHandler(m *Manager) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(topo)
+	})
+}
+
+// NewDeploysHandler — GET /api/v1/deploys?app=billing&window=24h&limit=20
+// Deploy markers detected from logs, newest first; empty app = all services.
+func NewDeploysHandler(m *Manager) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		window := 24 * time.Hour
+		if v := r.URL.Query().Get("window"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d <= 0 || d > 30*24*time.Hour {
+				http.Error(w, `{"error":"invalid window (want 1s..720h)"}`, http.StatusBadRequest)
+				return
+			}
+			window = d
+		}
+		limit := 50
+		if v := r.URL.Query().Get("limit"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 || n > 1000 {
+				http.Error(w, `{"error":"invalid limit (want 1..1000)"}`, http.StatusBadRequest)
+				return
+			}
+			limit = n
+		}
+
+		deploys, err := m.Deploys(r.Context(), model.DefaultTenant,
+			r.URL.Query().Get("app"), time.Now().Add(-window), limit)
+		if err != nil {
+			http.Error(w, `{"error":"deploys unavailable"}`, http.StatusInternalServerError)
+			return
+		}
+		if deploys == nil {
+			deploys = []Deploy{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"deploys": deploys})
 	})
 }
 

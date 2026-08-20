@@ -102,8 +102,11 @@ func run(args []string) error {
 	extractor := graph.NewExtractor(manager, graph.ExtractorOptions{})
 	defer extractor.Close() // flush graph aggregates before stores close
 
+	deploys := graph.NewDeployDetector(graphStore)
+	defer deploys.Close() // flush pending markers before the store closes
+
 	hub := tail.NewHub()
-	sink := fanout{batcher, hub, extractor}
+	sink := fanout{batcher, hub, extractor, deploys}
 
 	notifier, err := notify.New(cfg.Notify)
 	if err != nil {
@@ -135,7 +138,8 @@ func run(args []string) error {
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewExportHandler(manager)))
-
+	mux.Handle("GET /api/v1/deploys",
+		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDeploysHandler(manager)))
 	// Agent interface: MCP over Streamable HTTP (query_logs, get_topology,
 	// get_service_card). The transport uses GET/POST/DELETE; each method is
 	// registered separately so the catch-all "GET /" UI route stays valid.

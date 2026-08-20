@@ -64,6 +64,10 @@ required — traces only refine the map.
   rates (rps, error rate).
 - Export: `GET /api/v1/topology/export?format=mermaid|markdown` — paste the
   current architecture straight into your docs.
+- Deploy markers: version changes detected from the logs themselves (a
+  `version` field, or a deploy message) land on the service card next to
+  whatever happened right after — "2.3.1 deployed, seconds later the first
+  errors". API: `GET /api/v1/deploys?app=billing&window=24h`.
 
 ## MCP: the agent interface
 

@@ -57,3 +57,8 @@ func (m *Manager) Topology(ctx context.Context, tenantID string, window time.Dur
 	}
 	return topo, nil
 }
+
+// Deploys returns deploy markers newest-first; empty app = all apps.
+func (m *Manager) Deploys(ctx context.Context, tenantID, app string, since time.Time, limit int) ([]Deploy, error) {
+	return m.store.Deploys(ctx, tenantID, app, since, limit)
+}

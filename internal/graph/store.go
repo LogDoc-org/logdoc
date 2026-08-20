@@ -41,6 +41,7 @@ type Store interface {
 	// counters add up, origin bits OR together, last_seen advances.
 	UpsertGraph(ctx context.Context, nodes []NodeAgg, edges []EdgeAgg) error
 	Topology(ctx context.Context, tenantID string) (Topology, error)
+	DeployStore
 	Close() error
 }
 
