@@ -45,6 +45,12 @@ existing `logdoc-go-appender` and `logback-appenders` work unchanged.
 OTLP: gRPC logs on `:4317` — point any OpenTelemetry SDK or Collector at it
 (`service.name`→app, body→msg, severity→lvl, attributes→fields).
 
+Syslog: RFC 3164 and RFC 5424 with auto-detection, TCP (newline or
+octet-counting framing) and UDP. Off by default — enable with
+`LOGDOC_SYSLOG_UDP_ADDR=:5140` / `LOGDOC_SYSLOG_TCP_ADDR=:5140` (or the
+`ingest.syslog` section of the config) and point rsyslog, a router or a NAS
+at it.
+
 ## Architecture map
 
 LogDoc builds a live service map from the logs themselves: shared

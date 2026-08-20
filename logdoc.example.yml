@@ -11,6 +11,9 @@ ingest:
     udp_addr: ":9999"
   otlp:
     grpc_addr: ":4317"   # OTLP/gRPC logs; empty = disabled
+  syslog:
+    tcp_addr: ""         # e.g. ":5140"; RFC 3164 + RFC 5424 auto-detected,
+    udp_addr: ""         # newline and octet-counting (RFC 6587) TCP framing
 
 clickhouse:
   addr: "localhost:9010"   # port from deploy/docker-compose.dev.yml

@@ -19,6 +19,7 @@ the UI is served from the same port as the API.
 | 9001 | HTTP API + UI + MCP |
 | 9999/tcp, 9999/udp | native `ld_format` (v1 appenders) |
 | 4317 | OTLP/gRPC logs |
+| 5140/tcp, 5140/udp | syslog (off by default, see below) |
 
 ## 2. Send the first log
 
@@ -48,6 +49,23 @@ body → msg, severity → lvl, attributes → fields.
 **LogDoc v1 appenders** — [`logdoc-go-appender`](https://github.com/LogDoc-org/logdoc-go-appender)
 (logrus/zap) and [`logback-appenders`](https://github.com/LogDoc-org/logback-appenders)
 (Java) speak the native protocol on `:9999` unchanged.
+
+**Syslog** — routers, NAS boxes, legacy daemons. RFC 3164 and RFC 5424 are
+auto-detected; TCP accepts both newline-delimited and octet-counting
+(RFC 6587) framing. Off by default; enable with:
+
+```bash
+LOGDOC_SYSLOG_UDP_ADDR=:5140 LOGDOC_SYSLOG_TCP_ADDR=:5140 ./logdoc
+```
+
+Try it: `logger -n localhost -P 5140 -d "hello from syslog"`. Facility and
+severity map to fields/levels; entries arrive as app from the syslog tag,
+`src` = `syslog.<facility>.<app>`. For rsyslog forwarding:
+
+```
+# /etc/rsyslog.d/90-logdoc.conf
+*.* action(type="omfwd" target="logdoc-host" port="5140" protocol="tcp")
+```
 
 ## 4. Search and tail
 

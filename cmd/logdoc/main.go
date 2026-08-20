@@ -156,6 +156,11 @@ func run(args []string) error {
 		return fmt.Errorf("native listeners: %w", err)
 	}
 
+	syslogSrv, err := ingest.StartSyslog(sink, cfg.Ingest.Syslog.TCPAddr, cfg.Ingest.Syslog.UDPAddr)
+	if err != nil {
+		return fmt.Errorf("syslog listeners: %w", err)
+	}
+
 	otlp, err := ingest.StartOTLP(sink, cfg.Ingest.OTLP.GRPCAddr, cfg.Ingest.APIKey)
 	if err != nil {
 		return fmt.Errorf("otlp listener: %w", err)
@@ -188,6 +193,7 @@ func run(args []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	native.Shutdown(shutdownCtx)
+	syslogSrv.Shutdown(shutdownCtx)
 	otlp.Shutdown(shutdownCtx)
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("http shutdown: %w", err)

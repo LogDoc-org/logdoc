@@ -21,6 +21,7 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 | Sink/pipe plugins as jars/`.so` loaded by the server | protocols and notifications built in |
 | Watchdog rules configured in the UI | flat alert rules in yaml (`notify:`) |
 | Users, roles, per-user tokens | single API key (multi-user later) |
+| Syslog sink plugin (jar) | built-in syslog listener (RFC 3164/5424, TCP+UDP), `ingest.syslog` in config |
 | — | OTLP/gRPC ingest, architecture map, Mermaid export, MCP server |
 
 ## What v2 does not have yet
@@ -29,7 +30,7 @@ Planned, prioritized by demand — open an issue if one of these blocks you:
 
 - the full watchdog rule language (schedules, composite conditions);
 - a plugin SDK (v2 will use gRPC subprocesses instead of in-process jars);
-- syslog/journald ingest, OTLP traces and metrics;
+- journald ingest, OTLP traces and metrics;
 - RBAC and multi-tenant UI.
 
 ## Migration steps

@@ -38,6 +38,14 @@ type Ingest struct {
 	APIKey string `yaml:"api_key"`
 	Native Native `yaml:"native"`
 	OTLP   OTLP   `yaml:"otlp"`
+	Syslog Syslog `yaml:"syslog"`
+}
+
+type Syslog struct {
+	// TCPAddr/UDPAddr — syslog listeners (RFC 3164 + RFC 5424, auto-detected).
+	// Empty (default) disables the listener.
+	TCPAddr string `yaml:"tcp_addr"`
+	UDPAddr string `yaml:"udp_addr"`
 }
 
 type OTLP struct {
@@ -100,6 +108,8 @@ func Load(args []string) (Config, error) {
 	tcpAddr := fs.String("native-tcp-addr", "", "ld_format TCP listener address")
 	udpAddr := fs.String("native-udp-addr", "", "ld_format UDP listener address")
 	otlpAddr := fs.String("otlp-grpc-addr", "", "OTLP/gRPC logs listener address (e.g. :4317)")
+	syslogTCP := fs.String("syslog-tcp-addr", "", "syslog TCP listener address (e.g. :5140)")
+	syslogUDP := fs.String("syslog-udp-addr", "", "syslog UDP listener address (e.g. :5140)")
 	apiKey := fs.String("api-key", "", "ingest/query API key")
 	chAddr := fs.String("clickhouse-addr", "", "ClickHouse address (host:port, native)")
 	chDB := fs.String("clickhouse-db", "", "ClickHouse database")
@@ -129,6 +139,8 @@ func Load(args []string) (Config, error) {
 	setIf(&cfg.Ingest.Native.TCPAddr, *tcpAddr)
 	setIf(&cfg.Ingest.Native.UDPAddr, *udpAddr)
 	setIf(&cfg.Ingest.OTLP.GRPCAddr, *otlpAddr)
+	setIf(&cfg.Ingest.Syslog.TCPAddr, *syslogTCP)
+	setIf(&cfg.Ingest.Syslog.UDPAddr, *syslogUDP)
 	setIf(&cfg.Ingest.APIKey, *apiKey)
 	setIf(&cfg.ClickHouse.Addr, *chAddr)
 	setIf(&cfg.ClickHouse.Database, *chDB)
@@ -145,6 +157,8 @@ func applyEnv(cfg *Config) {
 	setIf(&cfg.Ingest.Native.TCPAddr, os.Getenv("LOGDOC_NATIVE_TCP_ADDR"))
 	setIf(&cfg.Ingest.Native.UDPAddr, os.Getenv("LOGDOC_NATIVE_UDP_ADDR"))
 	setIf(&cfg.Ingest.OTLP.GRPCAddr, os.Getenv("LOGDOC_OTLP_GRPC_ADDR"))
+	setIf(&cfg.Ingest.Syslog.TCPAddr, os.Getenv("LOGDOC_SYSLOG_TCP_ADDR"))
+	setIf(&cfg.Ingest.Syslog.UDPAddr, os.Getenv("LOGDOC_SYSLOG_UDP_ADDR"))
 	setIf(&cfg.Ingest.APIKey, os.Getenv("LOGDOC_API_KEY"))
 	setIf(&cfg.ClickHouse.Addr, os.Getenv("LOGDOC_CLICKHOUSE_ADDR"))
 	setIf(&cfg.ClickHouse.Database, os.Getenv("LOGDOC_CLICKHOUSE_DB"))
