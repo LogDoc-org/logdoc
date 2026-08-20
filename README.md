@@ -68,12 +68,15 @@ required — traces only refine the map.
   `version` field, or a deploy message) land on the service card next to
   whatever happened right after — "2.3.1 deployed, seconds later the first
   errors". API: `GET /api/v1/deploys?app=billing&window=24h`.
+- What changed: `GET /api/v1/topology/diff?window=1h` — new and silent
+  services and links, error-rate jumps versus the previous window, and
+  deploys, in one report. In the UI: the **Changes** toggle on the map.
 
 ## MCP: the agent interface
 
 LogDoc is an MCP server: any agent (Claude Code, or anything speaking MCP
-over Streamable HTTP) can investigate your system through three tools —
-`query_logs`, `get_topology`, `get_service_card`.
+over Streamable HTTP) can investigate your system through four tools —
+`query_logs`, `get_topology`, `get_topology_diff`, `get_service_card`.
 
 ```bash
 claude mcp add --transport http logdoc http://localhost:9001/mcp \

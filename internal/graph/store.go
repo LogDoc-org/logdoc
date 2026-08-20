@@ -50,6 +50,9 @@ type MetricsBackend interface {
 	InsertEdgeMetrics(ctx context.Context, ts time.Time, edges []EdgeAgg) error
 	// EdgeRates returns per-edge count/error sums over the trailing window.
 	EdgeRates(ctx context.Context, tenantID string, window time.Duration) (map[EdgeKey]Rates, error)
+	// EdgeRatesRange — the same sums over an explicit [from, to) range
+	// (used by the topology diff to compare adjacent windows).
+	EdgeRatesRange(ctx context.Context, tenantID string, from, to time.Time) (map[EdgeKey]Rates, error)
 }
 
 // Rates — windowed sums for one edge.

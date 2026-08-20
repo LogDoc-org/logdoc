@@ -49,6 +49,29 @@ func NewHTTPHandler(m *Manager) http.Handler {
 	})
 }
 
+// NewDiffHandler — GET /api/v1/topology/diff?window=1h
+// "What changed": new/silent services and edges, error-rate jumps, deploys.
+func NewDiffHandler(m *Manager) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		window := time.Hour
+		if v := r.URL.Query().Get("window"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d <= 0 || d > 24*time.Hour {
+				http.Error(w, `{"error":"invalid window (want 1s..24h)"}`, http.StatusBadRequest)
+				return
+			}
+			window = d
+		}
+		diff, err := m.Diff(r.Context(), model.DefaultTenant, window)
+		if err != nil {
+			http.Error(w, `{"error":"diff unavailable"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(diff)
+	})
+}
+
 // NewDeploysHandler — GET /api/v1/deploys?app=billing&window=24h&limit=20
 // Deploy markers detected from logs, newest first; empty app = all services.
 func NewDeploysHandler(m *Manager) http.Handler {

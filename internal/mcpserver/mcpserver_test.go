@@ -44,6 +44,10 @@ func (fakeMetrics) EdgeRates(context.Context, string, time.Duration) (map[graph.
 	return map[graph.EdgeKey]graph.Rates{}, nil
 }
 
+func (fakeMetrics) EdgeRatesRange(context.Context, string, time.Time, time.Time) (map[graph.EdgeKey]graph.Rates, error) {
+	return map[graph.EdgeKey]graph.Rates{}, nil
+}
+
 func newSession(t *testing.T, backend *fakeBackend) *sdk.ClientSession {
 	t.Helper()
 
@@ -64,6 +68,11 @@ func newSession(t *testing.T, backend *fakeBackend) *sdk.ClientSession {
 		}})
 	if err != nil {
 		t.Fatalf("seed graph: %v", err)
+	}
+	err = store.InsertDeploys(context.Background(), model.DefaultTenant,
+		[]graph.Deploy{{App: "billing", Version: "2.3.1", Ts: now.Add(-time.Minute)}})
+	if err != nil {
+		t.Fatalf("seed deploys: %v", err)
 	}
 
 	srv := New(backend, nil, graph.NewManager(store, fakeMetrics{}), "test")
@@ -106,7 +115,7 @@ func TestToolsAreListed(t *testing.T) {
 	for _, tool := range res.Tools {
 		got[tool.Name] = true
 	}
-	for _, want := range []string{"query_logs", "get_topology", "get_service_card"} {
+	for _, want := range []string{"query_logs", "get_topology", "get_topology_diff", "get_service_card"} {
 		if !got[want] {
 			t.Errorf("missing tool %q in %v", want, got)
 		}
@@ -176,6 +185,29 @@ func TestGetTopology(t *testing.T) {
 	}
 }
 
+func TestGetTopologyDiff(t *testing.T) {
+	session := newSession(t, &fakeBackend{})
+	res, err := session.CallTool(context.Background(), &sdk.CallToolParams{
+		Name:      "get_topology_diff",
+		Arguments: map[string]any{"window": "1h"},
+	})
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	var out graph.Diff
+	structured(t, res, &out)
+	// Both services and the edge were seeded "now", i.e. new within the window.
+	if len(out.NewServices) != 2 {
+		t.Errorf("new services: %+v", out.NewServices)
+	}
+	if len(out.NewEdges) != 1 || out.NewEdges[0].Src != "api" || out.NewEdges[0].Dst != "billing" {
+		t.Errorf("new edges: %+v", out.NewEdges)
+	}
+	if len(out.Deploys) != 1 || out.Deploys[0].Version != "2.3.1" {
+		t.Errorf("deploys: %+v", out.Deploys)
+	}
+}
+
 func TestGetServiceCard(t *testing.T) {
 	backend := &fakeBackend{entries: []model.Entry{
 		{TenantID: model.DefaultTenant, App: "billing", Lvl: model.LevelError, Msg: "charge declined", Ts: time.Now()},
@@ -203,6 +235,9 @@ func TestGetServiceCard(t *testing.T) {
 	}
 	if len(out.RecentErrors) != 1 || out.RecentErrors[0].Msg != "charge declined" {
 		t.Errorf("recent errors: %+v", out.RecentErrors)
+	}
+	if len(out.Deploys) != 1 || out.Deploys[0].Version != "2.3.1" {
+		t.Errorf("deploys: %+v", out.Deploys)
 	}
 }
 

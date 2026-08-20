@@ -37,6 +37,16 @@ type Selection = { kind: "node"; app: string } | { kind: "edge"; src: string; ds
 
 type ApiDeploy = { app: string; version: string; ts: string };
 
+// GET /api/v1/topology/diff — "what changed" vs the previous window.
+type ApiDiff = {
+  new_services: { app: string; first_seen: string }[];
+  silent_services: { app: string; last_seen: string }[];
+  new_edges: { src: string; dst: string }[];
+  silent_edges: { src: string; dst: string; last_seen: string }[];
+  error_jumps: { src: string; dst: string; prev_error_rate: number; cur_error_rate: number }[];
+  deploys: ApiDeploy[];
+};
+
 const ACCENT = "#e35b28";
 const BAD = "#ff4f4f"; // alarm red, deliberately far from the accent orange
 const BAD_RATE = 0.05; // error rate above which a node/edge is drawn as failing
@@ -63,6 +73,8 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
 
   const [selection, setSelection] = useState<Selection>(null);
   const [deploys, setDeploys] = useState<ApiDeploy[]>([]);
+  const [showChanges, setShowChanges] = useState(false);
+  const [diff, setDiff] = useState<ApiDiff | null>(null);
   const [win, setWin] = useState("5m");
   const [error, setError] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
@@ -135,6 +147,29 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
       dead = true;
     };
   }, [selection]);
+
+  // "What changed" report for the current window.
+  useEffect(() => {
+    if (!showChanges) {
+      setDiff(null);
+      return;
+    }
+    let dead = false;
+    const loadDiff = () => {
+      fetch(`/api/v1/topology/diff?window=${win}${apiKeyParam()}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: ApiDiff | null) => {
+          if (!dead && data) setDiff(data);
+        })
+        .catch(() => {});
+    };
+    loadDiff();
+    const iv = setInterval(loadDiff, 10000);
+    return () => {
+      dead = true;
+      clearInterval(iv);
+    };
+  }, [showChanges, win]);
 
   // Simulation + rendering loop.
   useEffect(() => {
@@ -500,6 +535,12 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         >
           Markdown
         </a>
+        <button
+          className={showChanges ? "winbtn on" : "winbtn"}
+          onClick={() => setShowChanges((v) => !v)}
+        >
+          Changes
+        </button>
         <span className="muted topo-hint">
           drag to pan · wheel to zoom · click a service or an edge · double-click to reset
         </span>
@@ -523,6 +564,102 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
           <div className="muted topo-empty">
             The map builds itself from logs: send entries with an app name (and trace/correlation
             ids for edges) and services appear here.
+          </div>
+        )}
+
+        {showChanges && diff && (
+          <div className="topo-panel topo-changes">
+            <div className="topo-title">
+              changed <span className="muted">· last {win} vs the {win} before</span>
+            </div>
+            {diff.new_services.length === 0 &&
+              diff.silent_services.length === 0 &&
+              diff.new_edges.length === 0 &&
+              diff.silent_edges.length === 0 &&
+              diff.error_jumps.length === 0 &&
+              diff.deploys.length === 0 && <div className="muted">nothing changed</div>}
+            {diff.error_jumps.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">error jumps</div>
+                {diff.error_jumps.map((j) => (
+                  <div
+                    key={`${j.src}→${j.dst}`}
+                    className="topo-link"
+                    onClick={() => setSelection({ kind: "edge", src: j.src, dst: j.dst })}
+                  >
+                    {j.src} → {j.dst}
+                    <span className="bad">
+                      {" "}
+                      {(j.prev_error_rate * 100).toFixed(1)}% → {(j.cur_error_rate * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {diff.deploys.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">deploys</div>
+                {diff.deploys.map((d) => (
+                  <div
+                    key={`${d.app}-${d.version}-${d.ts}`}
+                    className="topo-link"
+                    onClick={() => setSelection({ kind: "node", app: d.app })}
+                  >
+                    {d.app} <span className="accent">{d.version}</span>
+                    <span className="muted"> {new Date(d.ts).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {diff.new_services.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">new services</div>
+                {diff.new_services.map((n) => (
+                  <div
+                    key={n.app}
+                    className="topo-link"
+                    onClick={() => setSelection({ kind: "node", app: n.app })}
+                  >
+                    {n.app}
+                  </div>
+                ))}
+              </div>
+            )}
+            {diff.silent_services.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">went silent</div>
+                {diff.silent_services.map((n) => (
+                  <div key={n.app} className="topo-link">
+                    {n.app}
+                    <span className="muted"> last {new Date(n.last_seen).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {diff.new_edges.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">new links</div>
+                {diff.new_edges.map((e) => (
+                  <div
+                    key={`${e.src}→${e.dst}`}
+                    className="topo-link"
+                    onClick={() => setSelection({ kind: "edge", src: e.src, dst: e.dst })}
+                  >
+                    {e.src} → {e.dst}
+                  </div>
+                ))}
+              </div>
+            )}
+            {diff.silent_edges.length > 0 && (
+              <div className="topo-changes-sec">
+                <div className="muted">silent links</div>
+                {diff.silent_edges.map((e) => (
+                  <div key={`${e.src}→${e.dst}`} className="topo-link">
+                    {e.src} → {e.dst}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

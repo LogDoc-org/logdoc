@@ -360,6 +360,18 @@ a.winbtn { text-decoration: none; }
   padding: 12px 14px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
 }
+.topo-changes {
+  right: auto;
+  left: 12px;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+}
+.topo-changes .topo-title { word-break: normal; }
+.topo-changes .topo-title .muted { font-weight: 400; font-size: 11px; }
+.topo-changes-sec { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.topo-changes-sec > .muted { font-size: 11px; margin-bottom: 2px; }
+.topo-changes .topo-link .bad { color: #f53e3e; }
+.topo-changes .topo-link .accent { color: var(--accent); }
 .topo-title { font-weight: 600; margin-bottom: 8px; word-break: break-all; font-family: var(--mono); }
 .kv { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 .kv span { color: var(--muted); }

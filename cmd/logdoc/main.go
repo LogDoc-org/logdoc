@@ -138,11 +138,14 @@ func run(args []string) error {
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewExportHandler(manager)))
+	mux.Handle("GET /api/v1/topology/diff",
+		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDiffHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",
 		ingest.RequireAPIKey(cfg.Ingest.APIKey, graph.NewDeploysHandler(manager)))
 	// Agent interface: MCP over Streamable HTTP (query_logs, get_topology,
-	// get_service_card). The transport uses GET/POST/DELETE; each method is
-	// registered separately so the catch-all "GET /" UI route stays valid.
+	// get_topology_diff, get_service_card). The transport uses GET/POST/DELETE;
+	// each method is registered separately so the catch-all "GET /" UI route
+	// stays valid.
 	mcpSrv := mcpserver.New(store, store, manager, version)
 	mcpHandler := ingest.RequireAPIKey(cfg.Ingest.APIKey, mcpSrv.Handler())
 	for _, m := range []string{"GET", "POST", "DELETE"} {

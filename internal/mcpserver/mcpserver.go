@@ -1,5 +1,6 @@
-// Package mcpserver — the agent interface: an embedded MCP server with three
-// tools (query_logs, get_topology, get_service_card) over Streamable HTTP.
+// Package mcpserver — the agent interface: an embedded MCP server with four
+// tools (query_logs, get_topology, get_topology_diff, get_service_card) over
+// Streamable HTTP.
 // Agents get the same view of the system as the UI: logs, the architecture
 // map, and per-service summaries.
 package mcpserver
@@ -46,9 +47,19 @@ func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, v
 	}, s.getTopology)
 
 	sdk.AddTool(s.mcp, &sdk.Tool{
+		Name: "get_topology_diff",
+		Description: "What changed in the system over a trailing window, compared to the " +
+			"window before it: new and silent services, new and silent call edges, " +
+			"edges whose error rate jumped, and deploys detected from logs. " +
+			"Start here for questions like 'what changed in the last hour?'.",
+	}, s.getTopologyDiff)
+
+	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name: "get_service_card",
 		Description: "Everything about one service: entry/error counts, inbound and outbound " +
-			"edges with rates, and its most recent error log entries.",
+			"edges with rates, recent deploys detected from logs (version changes), " +
+			"and its most recent error log entries. Correlate deploy timestamps with " +
+			"the first errors to spot bad releases.",
 	}, s.getServiceCard)
 
 	return s
@@ -180,6 +191,24 @@ func (s *Server) getTopology(ctx context.Context, _ *sdk.CallToolRequest, args g
 	return nil, getTopologyResult{Nodes: topo.Nodes, Edges: topo.Edges, Mermaid: graph.Mermaid(topo)}, nil
 }
 
+// --- get_topology_diff ---
+
+type getTopologyDiffArgs struct {
+	Window string `json:"window,omitempty" jsonschema:"trailing window to compare against the window before it, like 1h (default 1h, max 24h)"`
+}
+
+func (s *Server) getTopologyDiff(ctx context.Context, _ *sdk.CallToolRequest, args getTopologyDiffArgs) (*sdk.CallToolResult, graph.Diff, error) {
+	window, err := parseWindow(args.Window, time.Hour)
+	if err != nil {
+		return nil, graph.Diff{}, err
+	}
+	diff, err := s.manager.Diff(ctx, model.DefaultTenant, window)
+	if err != nil {
+		return nil, graph.Diff{}, fmt.Errorf("diff unavailable: %w", err)
+	}
+	return nil, diff, nil
+}
+
 // --- get_service_card ---
 
 type getServiceCardArgs struct {
@@ -203,6 +232,7 @@ type getServiceCardResult struct {
 	Errors       uint64           `json:"errors"`
 	Inbound      []edgeInfo       `json:"inbound"`  // services calling this one
 	Outbound     []edgeInfo       `json:"outbound"` // services this one calls
+	Deploys      []graph.Deploy   `json:"deploys"`  // recent version changes, newest first
 	RecentErrors []query.EntryDTO `json:"recent_errors"`
 }
 
@@ -220,7 +250,7 @@ func (s *Server) getServiceCard(ctx context.Context, _ *sdk.CallToolRequest, arg
 		return nil, getServiceCardResult{}, fmt.Errorf("topology unavailable: %w", err)
 	}
 
-	res := getServiceCardResult{App: args.App, Inbound: []edgeInfo{}, Outbound: []edgeInfo{}, RecentErrors: []query.EntryDTO{}}
+	res := getServiceCardResult{App: args.App, Inbound: []edgeInfo{}, Outbound: []edgeInfo{}, Deploys: []graph.Deploy{}, RecentErrors: []query.EntryDTO{}}
 	found := false
 	for _, n := range topo.Nodes {
 		if n.App == args.App {
@@ -241,6 +271,18 @@ func (s *Server) getServiceCard(ctx context.Context, _ *sdk.CallToolRequest, arg
 			res.Outbound = append(res.Outbound, edgeInfo{Service: e.Dst, Origin: e.Origin, RPS: e.RPS, ErrorRate: e.ErrorRate, Count: e.Count})
 		}
 	}
+
+	// Deploys look further back than the rate window: a bad release matters
+	// even hours later.
+	deployWindow := window
+	if deployWindow < 24*time.Hour {
+		deployWindow = 24 * time.Hour
+	}
+	deploys, err := s.manager.Deploys(ctx, model.DefaultTenant, args.App, time.Now().Add(-deployWindow), 10)
+	if err != nil {
+		return nil, getServiceCardResult{}, fmt.Errorf("deploys unavailable: %w", err)
+	}
+	res.Deploys = append(res.Deploys, deploys...)
 
 	from := time.Now().Add(-window)
 	entries, err := s.backend.Query(ctx, query.Plan{

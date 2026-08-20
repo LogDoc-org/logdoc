@@ -30,11 +30,18 @@ func (s *Store) InsertEdgeMetrics(ctx context.Context, ts time.Time, edges []gra
 // EdgeRates sums edge observations over the trailing window
 // (implements graph.MetricsBackend).
 func (s *Store) EdgeRates(ctx context.Context, tenantID string, window time.Duration) (map[graph.EdgeKey]graph.Rates, error) {
+	now := time.Now()
+	return s.EdgeRatesRange(ctx, tenantID, now.Add(-window), now)
+}
+
+// EdgeRatesRange sums edge observations over [from, to)
+// (implements graph.MetricsBackend).
+func (s *Store) EdgeRatesRange(ctx context.Context, tenantID string, from, to time.Time) (map[graph.EdgeKey]graph.Rates, error) {
 	rows, err := s.conn.Query(ctx, fmt.Sprintf(`
 SELECT src, dst, sum(count), sum(errors)
 FROM %s.edge_metrics
-WHERE tenant_id = ? AND ts >= ?
-GROUP BY src, dst`, s.db), tenantID, time.Now().Add(-window))
+WHERE tenant_id = ? AND ts >= ? AND ts < ?
+GROUP BY src, dst`, s.db), tenantID, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("edge rates: %w", err)
 	}

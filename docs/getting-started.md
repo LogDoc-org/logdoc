@@ -97,6 +97,14 @@ Deploys are detected from the logs too: log a `version` field (or a message
 like `deploy billing 2.3.1`) and the version change appears on the service
 card in the Topology tab — next to whatever happened right after it.
 
+The **Changes** toggle on the map answers "what changed?": new and silent
+services and links, error-rate jumps versus the previous window, and deploys.
+The same over HTTP:
+
+```bash
+curl 'localhost:9001/api/v1/topology/diff?window=1h'
+```
+
 Export the current architecture for your docs:
 
 ```bash
@@ -105,8 +113,8 @@ curl 'localhost:9001/api/v1/topology/export?format=mermaid'
 
 ## 6. Let an agent in (MCP)
 
-LogDoc is an MCP server — `query_logs`, `get_topology`, `get_service_card`
-over Streamable HTTP:
+LogDoc is an MCP server — `query_logs`, `get_topology`, `get_topology_diff`,
+`get_service_card` over Streamable HTTP:
 
 ```bash
 claude mcp add --transport http logdoc http://localhost:9001/mcp \
