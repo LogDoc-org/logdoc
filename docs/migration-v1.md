@@ -18,10 +18,10 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 | v1 | v2 |
 |---|---|
 | Java server (`logdoc/community` image) + PostgreSQL + ClickHouse | one Go binary + ClickHouse |
-| Sink/pipe plugins as jars/`.so` loaded by the server | protocols and notifications built in |
+| Sink/pipe plugins as jars/`.so` loaded in-process | common protocols and channels built in; external plugins are supervised gRPC subprocesses (Plugin SDK v2, `pkg/sdk`) — source plugins ingest, pipe plugins become notification channels |
 | Watchdog rules with composite conditions | alert rules with nested and/or `match` conditions — `notify:` in yaml or the Rules tab in the UI |
 | Users, roles, per-user tokens | built-in users with admin/member roles, JWT sessions, revocable personal tokens (Access tab); the API key stays as the bootstrap credential |
-| Syslog sink plugin (jar) | built-in syslog listener (RFC 3164/5424, TCP+UDP), `ingest.syslog` in config |
+| Syslog, journald, Python sink plugins (jars) | built in: syslog listener (RFC 3164/5424, TCP+UDP), journald export over UDP incl. binary fields, Python `logging` Socket/DatagramHandler — `ingest.*` in config |
 | Parsing in the file-watchers agent only | server-side `pipelines:` — grok/regex/json parsing, severity mapping, rewrites and drops on ingest, whatever the source |
 | — | OTLP/gRPC ingest, architecture map, Mermaid export, MCP server |
 
@@ -29,8 +29,7 @@ ClickHouse as the only database (no PostgreSQL), Apache 2.0 all the way.
 
 Planned, prioritized by demand — open an issue if one of these blocks you:
 
-- a plugin SDK (v2 will use gRPC subprocesses instead of in-process jars);
-- journald ingest, OTLP traces and metrics;
+- OTLP traces and metrics;
 - multi-tenant UI and fine-grained (per-app) permissions.
 
 ## Migration steps
@@ -41,7 +40,8 @@ Planned, prioritized by demand — open an issue if one of these blocks you:
 3. Switch the rest, recreate watchdog rules as `notify:` rules — in yaml or
    right in the UI (Rules tab). Composite conditions map to `match` with
    nested `and`/`or`; pipe plugins map to channels (telegram, webhook,
-   email, kafka).
+   email, kafka — or port the plugin itself to the SDK v2 gRPC contract,
+   `pkg/sdk/proto/plugin.proto`).
 4. Retire v1 once its retention window has drained.
 
 Historical data is not migrated: log retention is TTL-bounded, so after one

@@ -23,6 +23,7 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/model"
 	"github.com/LogDoc-org/logdoc/internal/notify"
 	"github.com/LogDoc-org/logdoc/internal/pipeline"
+	"github.com/LogDoc-org/logdoc/internal/plugins"
 	"github.com/LogDoc-org/logdoc/internal/query"
 	"github.com/LogDoc-org/logdoc/internal/selflog"
 	"github.com/LogDoc-org/logdoc/internal/storage"
@@ -110,7 +111,15 @@ func run(args []string) error {
 	hub := tail.NewHub()
 	sink := fanout{batcher, hub, extractor, deploys}
 
-	notifier, err := notify.New(cfg.Notify)
+	// Plugins (SDK v2): pipe plugins become notification senders, source
+	// plugins start streaming once the ingest chain below is assembled.
+	pluginHost, err := plugins.New(cfg.Plugins)
+	if err != nil {
+		return err
+	}
+	defer pluginHost.Close()
+
+	notifier, err := notify.New(cfg.Notify, pluginHost.Senders()...)
 	if err != nil {
 		return err
 	}
@@ -149,6 +158,8 @@ func run(args []string) error {
 		stream = pl
 		logger.Info("pipelines enabled", "count", len(cfg.Pipelines))
 	}
+
+	pluginHost.Start(stream)
 
 	// Dogfooding: from this point on, LogDoc's own logs go into LogDoc itself.
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
@@ -214,6 +225,16 @@ func run(args []string) error {
 		return fmt.Errorf("syslog listeners: %w", err)
 	}
 
+	journald, err := ingest.StartJournald(stream, cfg.Ingest.Journald.UDPAddr)
+	if err != nil {
+		return fmt.Errorf("journald listener: %w", err)
+	}
+
+	pythonSrv, err := ingest.StartPython(stream, cfg.Ingest.Python.TCPAddr, cfg.Ingest.Python.UDPAddr)
+	if err != nil {
+		return fmt.Errorf("python listeners: %w", err)
+	}
+
 	otlp, err := ingest.StartOTLP(stream, cfg.Ingest.OTLP.GRPCAddr, authSvc.Verify)
 	if err != nil {
 		return fmt.Errorf("otlp listener: %w", err)
@@ -247,6 +268,8 @@ func run(args []string) error {
 	defer cancel()
 	native.Shutdown(shutdownCtx)
 	syslogSrv.Shutdown(shutdownCtx)
+	journald.Close()
+	pythonSrv.Close()
 	otlp.Shutdown(shutdownCtx)
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("http shutdown: %w", err)

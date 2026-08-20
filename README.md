@@ -51,6 +51,21 @@ octet-counting framing) and UDP. Off by default — enable with
 `ingest.syslog` section of the config) and point rsyslog, a router or a NAS
 at it.
 
+Journald: the systemd journal export format over UDP
+(`LOGDOC_JOURNALD_UDP_ADDR=:5514`), including binary fields:
+
+```bash
+journalctl -o export -f | socat - udp-sendto:logdoc-host:5514
+```
+
+Python: the stdlib logging handlers speak to LogDoc directly
+(`LOGDOC_PYTHON_TCP_ADDR=:9020`) — no library, no formatter:
+
+```python
+import logging, logging.handlers
+logging.getLogger().addHandler(logging.handlers.SocketHandler("logdoc-host", 9020))
+```
+
 ## Architecture map
 
 LogDoc builds a live service map from the logs themselves: shared
@@ -186,6 +201,31 @@ tokens for scripts and CI — revocable per token, carrying the user's role.
 Every credential is sent the same way: `X-API-Key`, `Authorization: Bearer`,
 or `?api_key=`. Creating the first user turns auth on everywhere, including
 OTLP ingest; the API key remains the recovery path.
+
+## Plugin SDK
+
+External plugins are standalone executables the core launches and supervises
+over gRPC — a crashed plugin is restarted with backoff, and a plugin can be
+written in any language that speaks gRPC. Two kinds:
+
+- **source** — receives data by its own means (a socket, a queue, an API)
+  and streams entries into the core;
+- **pipe** — becomes a notification channel, usable in alert rule `channels`
+  next to telegram/webhook/email/kafka.
+
+```yaml
+plugins:
+  - name: syslog-plugin
+    kind: source
+    exec: ./bin/plugins/syslog-source
+    config: {udp_addr: ":6514"}
+```
+
+The contract is one proto file — `pkg/sdk/proto/plugin.proto`; Go plugins
+use the `pkg/sdk` helpers (`sdk.ServeSource` / `sdk.ServePipe`) and are a
+single small `main.go`. Reference implementation:
+[`plugins/syslog-source`](plugins/syslog-source/main.go), built with
+`make plugins`.
 
 ## Development
 

@@ -153,8 +153,9 @@ type Engine struct {
 // New builds the engine. Nil (and no error) means notifications are off:
 // no rules and no channels configured. With at least one channel the engine
 // runs even without config rules — rules can be added through the API.
-func New(cfg Config) (*Engine, error) {
-	senders := buildSenders(cfg)
+// extra — additional senders beyond the built-in channels (pipe plugins).
+func New(cfg Config, extra ...Sender) (*Engine, error) {
+	senders := append(buildSenders(cfg), extra...)
 	if len(cfg.Rules) == 0 && len(senders) == 0 {
 		return nil, nil
 	}

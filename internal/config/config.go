@@ -12,6 +12,7 @@ import (
 
 	"github.com/LogDoc-org/logdoc/internal/notify"
 	"github.com/LogDoc-org/logdoc/internal/pipeline"
+	"github.com/LogDoc-org/logdoc/internal/plugins"
 )
 
 type Config struct {
@@ -20,6 +21,7 @@ type Config struct {
 	Auth       Auth                `yaml:"auth"`
 	ClickHouse ClickHouse          `yaml:"clickhouse"`
 	Graph      Graph               `yaml:"graph"`
+	Plugins    []plugins.Spec      `yaml:"plugins"`
 	Pipelines  []pipeline.Pipeline `yaml:"pipelines"`
 	Notify     notify.Config       `yaml:"notify"`
 	Log        Log                 `yaml:"log"`
@@ -45,10 +47,25 @@ type HTTP struct {
 type Ingest struct {
 	// APIKey — the single key of the S1 single-user mode.
 	// An empty key = ingest without authorization (dev mode).
-	APIKey string `yaml:"api_key"`
-	Native Native `yaml:"native"`
-	OTLP   OTLP   `yaml:"otlp"`
-	Syslog Syslog `yaml:"syslog"`
+	APIKey   string   `yaml:"api_key"`
+	Native   Native   `yaml:"native"`
+	OTLP     OTLP     `yaml:"otlp"`
+	Syslog   Syslog   `yaml:"syslog"`
+	Journald Journald `yaml:"journald"`
+	Python   Python   `yaml:"python"`
+}
+
+type Journald struct {
+	// UDPAddr — journal export format listener (journalctl -o export | socat).
+	// Empty (default) disables it.
+	UDPAddr string `yaml:"udp_addr"`
+}
+
+type Python struct {
+	// TCPAddr/UDPAddr — listeners for Python's logging.handlers
+	// SocketHandler/DatagramHandler (pickled LogRecord). Empty disables.
+	TCPAddr string `yaml:"tcp_addr"`
+	UDPAddr string `yaml:"udp_addr"`
 }
 
 type Syslog struct {
@@ -122,6 +139,9 @@ func Load(args []string) (Config, error) {
 	otlpAddr := fs.String("otlp-grpc-addr", "", "OTLP/gRPC logs listener address (e.g. :4317)")
 	syslogTCP := fs.String("syslog-tcp-addr", "", "syslog TCP listener address (e.g. :5140)")
 	syslogUDP := fs.String("syslog-udp-addr", "", "syslog UDP listener address (e.g. :5140)")
+	journaldUDP := fs.String("journald-udp-addr", "", "journald export UDP listener address (e.g. :5514)")
+	pythonTCP := fs.String("python-tcp-addr", "", "Python logging TCP listener address (e.g. :9020)")
+	pythonUDP := fs.String("python-udp-addr", "", "Python logging UDP listener address (e.g. :9020)")
 	apiKey := fs.String("api-key", "", "ingest/query API key")
 	chAddr := fs.String("clickhouse-addr", "", "ClickHouse address (host:port, native)")
 	chDB := fs.String("clickhouse-db", "", "ClickHouse database")
@@ -153,6 +173,9 @@ func Load(args []string) (Config, error) {
 	setIf(&cfg.Ingest.OTLP.GRPCAddr, *otlpAddr)
 	setIf(&cfg.Ingest.Syslog.TCPAddr, *syslogTCP)
 	setIf(&cfg.Ingest.Syslog.UDPAddr, *syslogUDP)
+	setIf(&cfg.Ingest.Journald.UDPAddr, *journaldUDP)
+	setIf(&cfg.Ingest.Python.TCPAddr, *pythonTCP)
+	setIf(&cfg.Ingest.Python.UDPAddr, *pythonUDP)
 	setIf(&cfg.Ingest.APIKey, *apiKey)
 	setIf(&cfg.ClickHouse.Addr, *chAddr)
 	setIf(&cfg.ClickHouse.Database, *chDB)
@@ -171,6 +194,9 @@ func applyEnv(cfg *Config) {
 	setIf(&cfg.Ingest.OTLP.GRPCAddr, os.Getenv("LOGDOC_OTLP_GRPC_ADDR"))
 	setIf(&cfg.Ingest.Syslog.TCPAddr, os.Getenv("LOGDOC_SYSLOG_TCP_ADDR"))
 	setIf(&cfg.Ingest.Syslog.UDPAddr, os.Getenv("LOGDOC_SYSLOG_UDP_ADDR"))
+	setIf(&cfg.Ingest.Journald.UDPAddr, os.Getenv("LOGDOC_JOURNALD_UDP_ADDR"))
+	setIf(&cfg.Ingest.Python.TCPAddr, os.Getenv("LOGDOC_PYTHON_TCP_ADDR"))
+	setIf(&cfg.Ingest.Python.UDPAddr, os.Getenv("LOGDOC_PYTHON_UDP_ADDR"))
 	setIf(&cfg.Ingest.APIKey, os.Getenv("LOGDOC_API_KEY"))
 	setIf(&cfg.ClickHouse.Addr, os.Getenv("LOGDOC_CLICKHOUSE_ADDR"))
 	setIf(&cfg.ClickHouse.Database, os.Getenv("LOGDOC_CLICKHOUSE_DB"))

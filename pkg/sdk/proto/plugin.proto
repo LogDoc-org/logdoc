@@ -1,0 +1,76 @@
+// LogDoc Plugin SDK v2: gRPC subprocess plugins.
+//
+// A plugin is a standalone executable. The core launches it, reads one
+// handshake line from its stdout:
+//
+//	LOGDOC-PLUGIN|1|tcp|127.0.0.1:PORT
+//
+// then connects over gRPC and drives one of the services below. Two kinds:
+//
+//   - source: receives data by its own means (listeners, polling, ...) and
+//     streams parsed entries into the core (v1 "sink plugins");
+//   - pipe: is called by the core when a notification rule fires
+//     (v1 "pipe plugins").
+//
+// The plugin must exit when its stdin closes — that is how it learns the
+// core is gone.
+syntax = "proto3";
+
+package logdoc.plugin.v1;
+
+option go_package = "github.com/LogDoc-org/logdoc/pkg/sdk/pluginpb";
+
+// Entry — one log entry (mirrors the core model).
+message Entry {
+  int64 ts_unix_nano = 1;              // 0 = let the core stamp arrival time
+  string app = 2;
+  string src = 3;
+  string pid = 4;
+  uint32 lvl = 5;                      // 0..6: DEBUG INFO LOG WARN ERROR SEVERE PANIC
+  string msg = 6;                      // mandatory
+  map<string, string> fields = 7;
+}
+
+// PluginConfig — the instance name and the flattened `config:` map of this
+// plugin's entry in logdoc.yml.
+message PluginConfig {
+  string name = 1;
+  map<string, string> config = 2;
+}
+
+// Info — what a plugin reports about itself during the handshake.
+message Info {
+  string name = 1;
+  string version = 2;
+  string kind = 3;                     // "source" | "pipe"
+}
+
+// Event — a fired notification rule (pipe plugins).
+message Event {
+  string rule = 1;
+  string type = 2;                     // error_threshold | silence
+  string app = 3;
+  int32 count = 4;
+  string window = 5;
+  int64 ts_unix_nano = 6;
+  string message = 7;
+  repeated Entry entries = 8;          // matched entries, capped by the core
+}
+
+message Empty {}
+
+// SourcePlugin — data intake. Run blocks for the lifetime of the plugin,
+// streaming entries; the core cancels the stream on shutdown and restarts
+// the subprocess if it exits or the stream breaks.
+service SourcePlugin {
+  rpc Describe(Empty) returns (Info);
+  rpc Run(PluginConfig) returns (stream Entry);
+}
+
+// PipePlugin — notification delivery. Configure is called once after every
+// (re)start, Fire once per fired rule.
+service PipePlugin {
+  rpc Describe(Empty) returns (Info);
+  rpc Configure(PluginConfig) returns (Empty);
+  rpc Fire(Event) returns (Empty);
+}

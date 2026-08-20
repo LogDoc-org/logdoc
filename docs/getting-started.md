@@ -20,6 +20,8 @@ the UI is served from the same port as the API.
 | 9999/tcp, 9999/udp | native `ld_format` (v1 appenders) |
 | 4317 | OTLP/gRPC logs |
 | 5140/tcp, 5140/udp | syslog (off by default, see below) |
+| 5514/udp | journald export (off by default, see below) |
+| 9020/tcp, 9020/udp | Python `logging` handlers (off by default, see below) |
 
 ## 2. Send the first log
 
@@ -66,6 +68,35 @@ severity map to fields/levels; entries arrive as app from the syslog tag,
 # /etc/rsyslog.d/90-logdoc.conf
 *.* action(type="omfwd" target="logdoc-host" port="5140" protocol="tcp")
 ```
+
+**Journald** — everything a systemd host logs, without an agent. Enable with
+`LOGDOC_JOURNALD_UDP_ADDR=:5514` and pipe the journal export stream at it:
+
+```bash
+journalctl -o export -f | socat - udp-sendto:logdoc-host:5514
+```
+
+Binary fields are handled; `PRIORITY` maps to the level, the unit or `_COMM`
+becomes the app, `_*` metadata fields (unit, hostname, cmdline) become
+searchable fields, `src` = `journald.<facility>.<app>`.
+
+**Python** — the stdlib `logging` handlers speak to LogDoc directly, no
+library and no formatter. Enable with `LOGDOC_PYTHON_TCP_ADDR=:9020` and:
+
+```python
+import logging, logging.handlers
+logging.getLogger().addHandler(logging.handlers.SocketHandler("logdoc-host", 9020))
+```
+
+Module → app, `levelname` → level (`CRITICAL` → `SEVERE`), the record
+attributes (logger name, function, thread, path) arrive as fields.
+`DatagramHandler` works too (`LOGDOC_PYTHON_UDP_ADDR`).
+
+**Anything else** — write a source plugin: a standalone executable in any
+language, launched and supervised by the core, streaming entries over gRPC.
+The contract is `pkg/sdk/proto/plugin.proto`, Go helpers in `pkg/sdk`, a
+reference implementation in `plugins/syslog-source`. Declare it in the
+`plugins:` section of `logdoc.yml`.
 
 ## 4. Search and tail
 

@@ -14,6 +14,13 @@ ingest:
   syslog:
     tcp_addr: ""         # e.g. ":5140"; RFC 3164 + RFC 5424 auto-detected,
     udp_addr: ""         # newline and octet-counting (RFC 6587) TCP framing
+  journald:
+    udp_addr: ""         # e.g. ":5514"; systemd journal export format:
+                         #   journalctl -o export -f | socat - udp-sendto:logdoc:5514
+  python:
+    tcp_addr: ""         # e.g. ":9020"; Python logging SocketHandler (pickled
+    udp_addr: ""         # LogRecord) / DatagramHandler — point the stdlib
+                         # handlers straight at LogDoc, no formatter needed
 
 clickhouse:
   addr: "localhost:9010"   # port from deploy/docker-compose.dev.yml
@@ -36,6 +43,24 @@ graph:
 auth:
   db_path: "logdoc-users.db"   # SQLite file with users, tokens, JWT secret
   session_ttl: 24h             # login session lifetime
+
+# Plugin SDK v2: external plugins as gRPC subprocesses. Each entry is an
+# executable the core launches and supervises (a crashed plugin is restarted
+# with backoff). Kinds: `source` — receives data by its own means and streams
+# entries into the core; `pipe` — becomes a notification channel under `name`
+# (usable in rule `channels`). The `config` map is passed to the plugin
+# verbatim. Contract: pkg/sdk/proto/plugin.proto; Go helpers: pkg/sdk;
+# reference implementation: plugins/syslog-source (make plugins).
+plugins: []
+# plugins:
+#   - name: syslog-plugin
+#     kind: source
+#     exec: ./bin/plugins/syslog-source
+#     config: {udp_addr: ":6514"}
+#   - name: jira-escalation
+#     kind: pipe
+#     exec: /opt/logdoc/plugins/jira
+#     config: {url: "https://jira.example.com", project: OPS}
 
 # Server-side pipelines: parse raw messages into structured fields on ingest,
 # before storage, tail, topology and notifications see the entry. Empty list =
