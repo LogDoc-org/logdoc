@@ -218,6 +218,41 @@ func TestDeploysInsertAndDedup(t *testing.T) {
 	}
 }
 
+func TestDeclaredReplaceAndRead(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	g1 := graph.DeclaredGraph{
+		Nodes: []graph.DeclaredNode{{App: "nginx"}, {App: "engine", Description: "the app"}},
+		Edges: []graph.DeclaredEdge{{Src: "nginx", Dst: "engine", Transport: "http", Evidence: "nginx.conf:69"}},
+	}
+	if err := s.ReplaceDeclared(ctx, "default", g1); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	got, err := s.DeclaredGraph(ctx, "default")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(got.Nodes) != 2 || len(got.Edges) != 1 || got.Edges[0].Evidence != "nginx.conf:69" {
+		t.Fatalf("first read: %+v", got)
+	}
+
+	// Replace, not merge: the second declaration is the whole truth.
+	g2 := graph.DeclaredGraph{Nodes: []graph.DeclaredNode{{App: "solo"}}}
+	if err := s.ReplaceDeclared(ctx, "default", g2); err != nil {
+		t.Fatalf("re-replace: %v", err)
+	}
+	got, _ = s.DeclaredGraph(ctx, "default")
+	if len(got.Nodes) != 1 || got.Nodes[0].App != "solo" || len(got.Edges) != 0 {
+		t.Fatalf("after replace: %+v", got)
+	}
+
+	// Tenant scoping.
+	if other, _ := s.DeclaredGraph(ctx, "other"); len(other.Nodes) != 0 {
+		t.Errorf("tenant leak: %+v", other)
+	}
+}
+
 func TestCatalogCRUD(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

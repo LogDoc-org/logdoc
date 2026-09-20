@@ -12,6 +12,9 @@ type Node struct {
 	LastSeen  time.Time `json:"last_seen"`
 	Count     uint64    `json:"count"`
 	Errors    uint64    `json:"errors"`
+	// DeclaredOnly — the service is promised by the code (declared graph)
+	// but has not logged anything yet.
+	DeclaredOnly bool `json:"declared_only,omitempty"`
 }
 
 // Edge — the current state of a directed service link.
@@ -27,6 +30,11 @@ type Edge struct {
 	// backend is unavailable).
 	RPS       float64 `json:"rps"`
 	ErrorRate float64 `json:"error_rate"`
+	// Declared graph overlay: the code promises this link (origin becomes
+	// "declared" when nothing has been observed yet).
+	Declared  bool   `json:"declared,omitempty"`
+	Transport string `json:"transport,omitempty"`
+	Evidence  string `json:"evidence,omitempty"`
 }
 
 // Topology — the full graph of one tenant.
@@ -43,6 +51,7 @@ type Store interface {
 	Topology(ctx context.Context, tenantID string) (Topology, error)
 	DeployStore
 	CatalogStore
+	DeclaredStore
 	Close() error
 }
 

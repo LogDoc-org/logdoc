@@ -93,12 +93,21 @@ required — traces only refine the map.
   runbook, dashboard) and tags — declared in `logdoc.yml` (`catalog:`) or
   edited right on the card. The observed half of the card keeps itself
   fresh from logs; this is the declared half. API: `/api/v1/catalog`.
+- Declared graph: an agent that reads your repository can declare the
+  architecture it found — services, links, transports, `file:line`
+  evidence — via the `declare_topology` MCP tool or
+  `PUT /api/v1/topology/declared`. Declared links show dashed until real
+  traffic confirms them; the map is complete before the first log line,
+  and declared-vs-observed disagreement is drift your docs never show.
 
 ## MCP: the agent interface
 
 LogDoc is an MCP server: any agent (Claude Code, or anything speaking MCP
-over Streamable HTTP) can investigate your system through four tools —
-`query_logs`, `get_topology`, `get_topology_diff`, `get_service_card`.
+over Streamable HTTP) can investigate your system through five tools —
+`query_logs`, `get_topology`, `get_topology_diff`, `get_service_card`,
+`declare_topology`. The last one works the other way around: open an agent
+in your repository, ask it to analyze the code and declare the architecture
+— the map fills in before a single log line arrives.
 
 ```bash
 claude mcp add --transport http logdoc http://localhost:9001/mcp \

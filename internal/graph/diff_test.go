@@ -22,6 +22,10 @@ func (s *diffStore) DeleteMeta(context.Context, string, string) error        { r
 func (s *diffStore) CatalogMeta(context.Context, string) ([]ServiceMeta, error) {
 	return nil, nil
 }
+func (s *diffStore) ReplaceDeclared(context.Context, string, DeclaredGraph) error { return nil }
+func (s *diffStore) DeclaredGraph(context.Context, string) (DeclaredGraph, error) {
+	return DeclaredGraph{}, nil
+}
 func (s *diffStore) Close() error { return nil }
 
 func (s *diffStore) Deploys(_ context.Context, _, app string, since time.Time, _ int) ([]Deploy, error) {

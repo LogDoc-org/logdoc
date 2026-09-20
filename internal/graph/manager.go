@@ -31,12 +31,19 @@ func (m *Manager) ApplyGraph(nodes []NodeAgg, edges []EdgeAgg) {
 	}
 }
 
-// Topology returns the current graph with windowed rates merged into edges.
-// A metrics failure degrades to rates=0 instead of failing the map.
+// Topology returns the current graph with windowed rates merged into edges
+// and the declared graph folded in (declared-only services and links appear
+// with zero counters). A metrics failure degrades to rates=0 instead of
+// failing the map.
 func (m *Manager) Topology(ctx context.Context, tenantID string, window time.Duration) (Topology, error) {
 	topo, err := m.store.Topology(ctx, tenantID)
 	if err != nil {
 		return Topology{}, err
+	}
+	if decl, derr := m.store.DeclaredGraph(ctx, tenantID); derr != nil {
+		slog.Warn("graph: declared graph unavailable", "err", derr)
+	} else {
+		topo = mergeDeclared(topo, decl)
 	}
 	rates, err := m.metrics.EdgeRates(ctx, tenantID, window)
 	if err != nil {
@@ -61,4 +68,17 @@ func (m *Manager) Topology(ctx context.Context, tenantID string, window time.Dur
 // Deploys returns deploy markers newest-first; empty app = all apps.
 func (m *Manager) Deploys(ctx context.Context, tenantID, app string, since time.Time, limit int) ([]Deploy, error) {
 	return m.store.Deploys(ctx, tenantID, app, since, limit)
+}
+
+// DeclareTopology validates and stores the declared graph (full replace).
+func (m *Manager) DeclareTopology(ctx context.Context, tenantID string, g DeclaredGraph) error {
+	if err := ValidateDeclared(g); err != nil {
+		return err
+	}
+	return m.store.ReplaceDeclared(ctx, tenantID, g)
+}
+
+// Declared returns the stored declared graph.
+func (m *Manager) Declared(ctx context.Context, tenantID string) (DeclaredGraph, error) {
+	return m.store.DeclaredGraph(ctx, tenantID)
 }

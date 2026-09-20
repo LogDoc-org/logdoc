@@ -10,6 +10,7 @@ type ApiNode = {
   last_seen: string;
   count: number;
   errors: number;
+  declared_only?: boolean; // promised by the code, no logs yet
 };
 
 type ApiEdge = {
@@ -22,6 +23,9 @@ type ApiEdge = {
   errors: number;
   rps: number;
   error_rate: number;
+  declared?: boolean; // the code promises this link
+  transport?: string;
+  evidence?: string;
 };
 
 type SimNode = ApiNode & {
@@ -343,9 +347,13 @@ export default function Topology({
                 : "rgba(120,126,140,0.45)";
         ctx.lineWidth = (isSel ? 2.2 : bad ? 2 : lit ? 1.8 : 1.1) / zm;
         // Failing edges: marching red dashes, so the failure reads as live.
+        // Declared-but-unobserved edges: static dashes — the code promises
+        // the link, traffic has not confirmed it yet.
         if (bad && !dim) {
           ctx.setLineDash([7 / zm, 5 / zm]);
           ctx.lineDashOffset = -(now / 40) / zm;
+        } else if (e.origin === "declared") {
+          ctx.setLineDash([4 / zm, 4 / zm]);
         }
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -399,10 +407,19 @@ export default function Topology({
           ctx.arc(n.x, n.y, r + (3 + pulse * 5) / zm, 0, Math.PI * 2);
           ctx.stroke();
         }
-        ctx.fillStyle = bad ? BAD : ACCENT;
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        if (n.declared_only) {
+          // Ghost node: the code promises the service, no logs yet.
+          ctx.strokeStyle = "rgba(227,91,40,0.7)";
+          ctx.lineWidth = 1.4 / zm;
+          ctx.setLineDash([3 / zm, 3 / zm]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          ctx.fillStyle = bad ? BAD : ACCENT;
+          ctx.fill();
+        }
         if (isSel || hover === n.app) {
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 1.5 / zm;
@@ -823,22 +840,33 @@ export default function Topology({
                 </div>
               </div>
             )}
+            {selNode.declared_only && (
+              <div className="muted topo-meta-note">declared in code · no logs yet</div>
+            )}
+            {!selNode.declared_only && (
             <div className="kv">
               <span>entries</span>
               <b>{selNode.count.toLocaleString()}</b>
             </div>
-            <div className="kv">
-              <span>errors</span>
-              <b className={selNode.errors > 0 ? "bad" : ""}>{selNode.errors.toLocaleString()}</b>
-            </div>
-            <div className="kv">
-              <span>first seen</span>
-              <b>{new Date(selNode.first_seen).toLocaleString()}</b>
-            </div>
-            <div className="kv">
-              <span>last seen</span>
-              <b>{new Date(selNode.last_seen).toLocaleString()}</b>
-            </div>
+            )}
+            {!selNode.declared_only && (
+              <>
+                <div className="kv">
+                  <span>errors</span>
+                  <b className={selNode.errors > 0 ? "bad" : ""}>
+                    {selNode.errors.toLocaleString()}
+                  </b>
+                </div>
+                <div className="kv">
+                  <span>first seen</span>
+                  <b>{new Date(selNode.first_seen).toLocaleString()}</b>
+                </div>
+                <div className="kv">
+                  <span>last seen</span>
+                  <b>{new Date(selNode.last_seen).toLocaleString()}</b>
+                </div>
+              </>
+            )}
             {!metaForm && Object.keys(selMeta?.links ?? {}).length > 0 && (
               <div className="topo-meta-links">
                 <div className="muted">links</div>
@@ -894,8 +922,20 @@ export default function Topology({
             </div>
             <div className="kv">
               <span>origin</span>
-              <b>{selEdge.origin}</b>
+              <b>{selEdge.declared && selEdge.origin !== "declared" ? `${selEdge.origin} + declared` : selEdge.origin}</b>
             </div>
+            {selEdge.transport && (
+              <div className="kv">
+                <span>transport</span>
+                <b>{selEdge.transport}</b>
+              </div>
+            )}
+            {selEdge.evidence && (
+              <div className="kv">
+                <span>evidence</span>
+                <b>{selEdge.evidence}</b>
+              </div>
+            )}
             <div className="kv">
               <span>rate</span>
               <b>{selEdge.rps > 0 ? `${selEdge.rps.toFixed(2)} rps` : "—"}</b>

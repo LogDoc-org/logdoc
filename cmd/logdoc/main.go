@@ -187,6 +187,12 @@ func run(args []string) error {
 		authSvc.Require(auth.RoleMember, graph.NewExportHandler(manager, catalog)))
 	mux.Handle("GET /api/v1/topology/diff",
 		authSvc.Require(auth.RoleMember, graph.NewDiffHandler(manager)))
+	// Declared graph: what the code promises. Members read, admins replace
+	// (usually an agent that analyzed the repository).
+	mux.Handle("GET /api/v1/topology/declared",
+		authSvc.Require(auth.RoleMember, graph.NewDeclaredHandler(manager)))
+	mux.Handle("PUT /api/v1/topology/declared",
+		authSvc.Require(auth.RoleAdmin, graph.NewDeclaredHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",
 		authSvc.Require(auth.RoleMember, graph.NewDeploysHandler(manager)))
 	// Catalog: members read it, admins edit it; config-declared entries stay

@@ -189,7 +189,7 @@ curl 'localhost:9001/api/v1/topology/export?format=backstage&window=24h'
 ## 7. Let an agent in (MCP)
 
 LogDoc is an MCP server — `query_logs`, `get_topology`, `get_topology_diff`,
-`get_service_card` over Streamable HTTP:
+`get_service_card`, `declare_topology` over Streamable HTTP:
 
 ```bash
 claude mcp add --transport http logdoc http://localhost:9001/mcp \
@@ -198,6 +198,12 @@ claude mcp add --transport http logdoc http://localhost:9001/mcp \
 
 Then ask: *"why is checkout failing?"* — the agent walks the map, follows
 the error edges and reads the logs itself.
+
+It also works in reverse: open the agent in your repository and ask it to
+*"analyze the code and declare the architecture in LogDoc"* — it reads the
+code and calls `declare_topology` with services, links, transports and
+`file:line` evidence. Declared links render dashed until real traffic
+confirms them, so the map is complete before the first log line.
 
 ## 8. Alerts
 

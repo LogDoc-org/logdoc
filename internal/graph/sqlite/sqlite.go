@@ -67,6 +67,20 @@ CREATE TABLE IF NOT EXISTS deploys (
 	ts        INTEGER NOT NULL -- unix milliseconds
 );
 CREATE INDEX IF NOT EXISTS deploys_app_ts ON deploys (tenant_id, app, ts DESC);
+CREATE TABLE IF NOT EXISTS declared_nodes (
+	tenant_id   TEXT NOT NULL,
+	app         TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (tenant_id, app)
+);
+CREATE TABLE IF NOT EXISTS declared_edges (
+	tenant_id TEXT NOT NULL,
+	src       TEXT NOT NULL,
+	dst       TEXT NOT NULL,
+	transport TEXT NOT NULL DEFAULT '',
+	evidence  TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (tenant_id, src, dst)
+);
 CREATE TABLE IF NOT EXISTS catalog (
 	tenant_id   TEXT    NOT NULL,
 	app         TEXT    NOT NULL,
@@ -236,6 +250,76 @@ func (s *Store) Deploys(ctx context.Context, tenantID, app string, since time.Ti
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// ReplaceDeclared atomically replaces the tenant's declared graph: the
+// source of truth is the latest code analysis, not an accumulation.
+func (s *Store) ReplaceDeclared(ctx context.Context, tenantID string, g graph.DeclaredGraph) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("declared replace begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, q := range []string{
+		`DELETE FROM declared_nodes WHERE tenant_id = ?`,
+		`DELETE FROM declared_edges WHERE tenant_id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, tenantID); err != nil {
+			return fmt.Errorf("declared clear: %w", err)
+		}
+	}
+	for _, n := range g.Nodes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO declared_nodes (tenant_id, app, description) VALUES (?, ?, ?)`,
+			tenantID, n.App, n.Description); err != nil {
+			return fmt.Errorf("declared node %s: %w", n.App, err)
+		}
+	}
+	for _, e := range g.Edges {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO declared_edges (tenant_id, src, dst, transport, evidence) VALUES (?, ?, ?, ?, ?)`,
+			tenantID, e.Src, e.Dst, e.Transport, e.Evidence); err != nil {
+			return fmt.Errorf("declared edge %s→%s: %w", e.Src, e.Dst, err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeclaredGraph(ctx context.Context, tenantID string) (graph.DeclaredGraph, error) {
+	var g graph.DeclaredGraph
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT app, description FROM declared_nodes WHERE tenant_id = ? ORDER BY app`, tenantID)
+	if err != nil {
+		return g, fmt.Errorf("declared nodes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var n graph.DeclaredNode
+		if err := rows.Scan(&n.App, &n.Description); err != nil {
+			return g, err
+		}
+		g.Nodes = append(g.Nodes, n)
+	}
+	if err := rows.Err(); err != nil {
+		return g, err
+	}
+
+	erows, err := s.db.QueryContext(ctx,
+		`SELECT src, dst, transport, evidence FROM declared_edges WHERE tenant_id = ? ORDER BY src, dst`, tenantID)
+	if err != nil {
+		return g, fmt.Errorf("declared edges: %w", err)
+	}
+	defer func() { _ = erows.Close() }()
+	for erows.Next() {
+		var e graph.DeclaredEdge
+		if err := erows.Scan(&e.Src, &e.Dst, &e.Transport, &e.Evidence); err != nil {
+			return g, err
+		}
+		g.Edges = append(g.Edges, e)
+	}
+	return g, erows.Err()
 }
 
 func (s *Store) UpsertMeta(ctx context.Context, tenantID string, m graph.ServiceMeta) error {

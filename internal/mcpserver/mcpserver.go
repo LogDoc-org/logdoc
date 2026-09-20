@@ -1,8 +1,9 @@
-// Package mcpserver — the agent interface: an embedded MCP server with four
-// tools (query_logs, get_topology, get_topology_diff, get_service_card) over
-// Streamable HTTP.
+// Package mcpserver — the agent interface: an embedded MCP server over
+// Streamable HTTP with five tools: query_logs, get_topology,
+// get_topology_diff, get_service_card, declare_topology.
 // Agents get the same view of the system as the UI: logs, the architecture
-// map, and per-service summaries.
+// map, and per-service summaries — and can declare the architecture they
+// found by reading the code.
 package mcpserver
 
 import (
@@ -64,6 +65,16 @@ func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, c
 			"timestamps with the first errors to spot bad releases; use owner and " +
 			"links to say who to page and where the runbook is.",
 	}, s.getServiceCard)
+
+	sdk.AddTool(s.mcp, &sdk.Tool{
+		Name: "declare_topology",
+		Description: "Declare the architecture found by analyzing the source code: services " +
+			"(nodes) and directed links (edges) with a transport (http, sql, s3, smtp, ...) " +
+			"and an evidence reference (file:line). REPLACES the previous declaration " +
+			"entirely, so always send the complete graph. Declared links appear on the map " +
+			"immediately (dashed until confirmed by real traffic); disagreement between the " +
+			"declared and observed graph is architecture drift.",
+	}, s.declareTopology)
 
 	return s
 }
@@ -210,6 +221,27 @@ func (s *Server) getTopologyDiff(ctx context.Context, _ *sdk.CallToolRequest, ar
 		return nil, graph.Diff{}, fmt.Errorf("diff unavailable: %w", err)
 	}
 	return nil, diff, nil
+}
+
+// --- declare_topology ---
+
+type declareTopologyArgs struct {
+	Nodes []graph.DeclaredNode `json:"nodes" jsonschema:"services the code declares: app (required) and an optional description"`
+	Edges []graph.DeclaredEdge `json:"edges" jsonschema:"directed links: src, dst, optional transport (http, sql, s3, smtp, ...) and evidence (file:line)"`
+}
+
+type declareTopologyResult struct {
+	Status string `json:"status"`
+	Nodes  int    `json:"nodes"`
+	Edges  int    `json:"edges"`
+}
+
+func (s *Server) declareTopology(ctx context.Context, _ *sdk.CallToolRequest, args declareTopologyArgs) (*sdk.CallToolResult, declareTopologyResult, error) {
+	g := graph.DeclaredGraph{Nodes: args.Nodes, Edges: args.Edges}
+	if err := s.manager.DeclareTopology(ctx, model.DefaultTenant, g); err != nil {
+		return nil, declareTopologyResult{}, err
+	}
+	return nil, declareTopologyResult{Status: "ok", Nodes: len(g.Nodes), Edges: len(g.Edges)}, nil
 }
 
 // --- get_service_card ---

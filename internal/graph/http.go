@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -107,6 +108,42 @@ func NewDeploysHandler(m *Manager) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"deploys": deploys})
+	})
+}
+
+// NewDeclaredHandler — GET/PUT /api/v1/topology/declared
+// GET returns the declared graph; PUT replaces it (typically posted by an
+// agent that analyzed the repository: nodes, edges, transports, evidence).
+func NewDeclaredHandler(m *Manager) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			g, err := m.Declared(r.Context(), model.DefaultTenant)
+			if err != nil {
+				http.Error(w, `{"error":"declared graph unavailable"}`, http.StatusInternalServerError)
+				return
+			}
+			if g.Nodes == nil {
+				g.Nodes = []DeclaredNode{}
+			}
+			if g.Edges == nil {
+				g.Edges = []DeclaredEdge{}
+			}
+			_ = json.NewEncoder(w).Encode(g)
+			return
+		}
+
+		var g DeclaredGraph
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&g); err != nil {
+			http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+			return
+		}
+		if err := m.DeclareTopology(r.Context(), model.DefaultTenant, g); err != nil {
+			b, _ := json.Marshal(map[string]string{"error": err.Error()})
+			http.Error(w, string(b), http.StatusBadRequest)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"status":"ok","nodes":%d,"edges":%d}`, len(g.Nodes), len(g.Edges))
 	})
 }
 
