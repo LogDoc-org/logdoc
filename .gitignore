@@ -4,3 +4,4 @@ bin/
 /logdoc.yml
 ui/node_modules/
 ui/tsconfig.tsbuildinfo
+.idea/
