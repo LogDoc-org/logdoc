@@ -45,14 +45,14 @@ type ErrorJump struct {
 
 // Diff — everything that changed between [from, to] and the window before it.
 type Diff struct {
-	From           time.Time  `json:"from"`
-	To             time.Time  `json:"to"`
-	NewServices    []DiffNode `json:"new_services"`
-	SilentServices []DiffNode `json:"silent_services"` // logged before, silent in the window
-	NewEdges       []DiffEdge `json:"new_edges"`
-	SilentEdges    []DiffEdge `json:"silent_edges"`
+	From           time.Time   `json:"from"`
+	To             time.Time   `json:"to"`
+	NewServices    []DiffNode  `json:"new_services"`
+	SilentServices []DiffNode  `json:"silent_services"` // logged before, silent in the window
+	NewEdges       []DiffEdge  `json:"new_edges"`
+	SilentEdges    []DiffEdge  `json:"silent_edges"`
 	ErrorJumps     []ErrorJump `json:"error_jumps"`
-	Deploys        []Deploy   `json:"deploys"`
+	Deploys        []Deploy    `json:"deploys"`
 }
 
 // Diff computes the change report for the trailing window. The comparison

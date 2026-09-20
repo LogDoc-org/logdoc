@@ -86,6 +86,10 @@ required — traces only refine the map.
 - What changed: `GET /api/v1/topology/diff?window=1h` — new and silent
   services and links, error-rate jumps versus the previous window, and
   deploys, in one report. In the UI: the **Changes** toggle on the map.
+- Catalog: the service card carries owner, description, links (repo,
+  runbook, dashboard) and tags — declared in `logdoc.yml` (`catalog:`) or
+  edited right on the card. The observed half of the card keeps itself
+  fresh from logs; this is the declared half. API: `/api/v1/catalog`.
 
 ## MCP: the agent interface
 

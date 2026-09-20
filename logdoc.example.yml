@@ -33,6 +33,21 @@ clickhouse:
 graph:
   db_path: "logdoc-graph.db"   # SQLite file with the architecture graph state
 
+# Service catalog: the declared half of a service card — who owns it, what it
+# is, where the repo/runbook/dashboard live. The observed half (edges, rates,
+# deploys) keeps itself fresh from the logs. Entries declared here are
+# read-only in the UI/API; admins can also edit cards at runtime (persisted
+# in the graph SQLite file). Links: name → absolute http(s) URL.
+catalog: []
+# catalog:
+#   - app: billing
+#     owner: team-payments
+#     description: Card charges and refunds
+#     links:
+#       repo: https://github.com/example/billing
+#       runbook: https://wiki.example.com/billing-runbook
+#     tags: [critical, pci]
+
 # Users and roles. With no users and an empty ingest.api_key everything is
 # open (dev mode). Creating the first user — or setting the API key — turns
 # auth on for every surface (HTTP API, UI, OTLP). The API key always maps to

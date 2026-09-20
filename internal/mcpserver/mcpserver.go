@@ -25,12 +25,13 @@ type Server struct {
 	backend query.Backend
 	stats   query.StatsSink
 	manager *graph.Manager
+	catalog *graph.Catalog
 	mcp     *sdk.Server
 }
 
 // New builds the MCP server and registers the tools.
-func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, version string) *Server {
-	s := &Server{backend: backend, stats: stats, manager: manager}
+func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, catalog *graph.Catalog, version string) *Server {
+	s := &Server{backend: backend, stats: stats, manager: manager, catalog: catalog}
 	s.mcp = sdk.NewServer(&sdk.Implementation{Name: "logdoc", Version: version}, nil)
 
 	sdk.AddTool(s.mcp, &sdk.Tool{
@@ -58,8 +59,10 @@ func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, v
 		Name: "get_service_card",
 		Description: "Everything about one service: entry/error counts, inbound and outbound " +
 			"edges with rates, recent deploys detected from logs (version changes), " +
-			"and its most recent error log entries. Correlate deploy timestamps with " +
-			"the first errors to spot bad releases.",
+			"its most recent error log entries, and catalog metadata (owner, " +
+			"description, links such as repo/runbook, tags). Correlate deploy " +
+			"timestamps with the first errors to spot bad releases; use owner and " +
+			"links to say who to page and where the runbook is.",
 	}, s.getServiceCard)
 
 	return s
@@ -234,6 +237,11 @@ type getServiceCardResult struct {
 	Outbound     []edgeInfo       `json:"outbound"` // services this one calls
 	Deploys      []graph.Deploy   `json:"deploys"`  // recent version changes, newest first
 	RecentErrors []query.EntryDTO `json:"recent_errors"`
+	// Catalog metadata (empty when the service has no catalog entry).
+	Owner       string            `json:"owner,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Links       map[string]string `json:"links,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
 }
 
 func (s *Server) getServiceCard(ctx context.Context, _ *sdk.CallToolRequest, args getServiceCardArgs) (*sdk.CallToolResult, getServiceCardResult, error) {
@@ -283,6 +291,11 @@ func (s *Server) getServiceCard(ctx context.Context, _ *sdk.CallToolRequest, arg
 		return nil, getServiceCardResult{}, fmt.Errorf("deploys unavailable: %w", err)
 	}
 	res.Deploys = append(res.Deploys, deploys...)
+
+	if meta, err := s.catalog.Get(ctx, model.DefaultTenant, args.App); err == nil {
+		res.Owner, res.Description = meta.Owner, meta.Description
+		res.Links, res.Tags = meta.Links, meta.Tags
+	}
 
 	from := time.Now().Add(-window)
 	entries, err := s.backend.Query(ctx, query.Plan{

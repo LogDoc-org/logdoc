@@ -2,6 +2,7 @@ package graph
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -106,6 +107,57 @@ func NewDeploysHandler(m *Manager) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"deploys": deploys})
+	})
+}
+
+// NewCatalogListHandler — GET /api/v1/catalog
+// Every catalog entry of the tenant: config-declared and runtime-edited.
+func NewCatalogListHandler(c *Catalog) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		services, err := c.List(r.Context(), model.DefaultTenant)
+		if err != nil {
+			http.Error(w, `{"error":"catalog unavailable"}`, http.StatusInternalServerError)
+			return
+		}
+		if services == nil {
+			services = []ServiceMeta{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"services": services})
+	})
+}
+
+// NewCatalogEditHandler — PUT/DELETE /api/v1/catalog/{app}
+// Creates, replaces or removes one runtime entry; config-declared entries
+// are read-only here (edit logdoc.yml instead).
+func NewCatalogEditHandler(c *Catalog) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app := r.PathValue("app")
+		w.Header().Set("Content-Type", "application/json")
+
+		var err error
+		switch r.Method {
+		case http.MethodDelete:
+			err = c.Delete(r.Context(), model.DefaultTenant, app)
+		default: // PUT
+			var m ServiceMeta
+			if derr := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&m); derr != nil {
+				http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+				return
+			}
+			m.App = app // the path is authoritative
+			err = c.Put(r.Context(), model.DefaultTenant, m)
+		}
+
+		switch {
+		case err == nil:
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		case errors.Is(err, ErrConfigDefined):
+			http.Error(w, `{"error":"defined in the config file (read-only via API)"}`, http.StatusConflict)
+		default:
+			b, _ := json.Marshal(map[string]string{"error": err.Error()})
+			http.Error(w, string(b), http.StatusBadRequest)
+		}
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/LogDoc-org/logdoc/internal/graph"
 	"github.com/LogDoc-org/logdoc/internal/notify"
 	"github.com/LogDoc-org/logdoc/internal/pipeline"
 	"github.com/LogDoc-org/logdoc/internal/plugins"
@@ -21,6 +22,7 @@ type Config struct {
 	Auth       Auth                `yaml:"auth"`
 	ClickHouse ClickHouse          `yaml:"clickhouse"`
 	Graph      Graph               `yaml:"graph"`
+	Catalog    []graph.ServiceMeta `yaml:"catalog"`
 	Plugins    []plugins.Spec      `yaml:"plugins"`
 	Pipelines  []pipeline.Pipeline `yaml:"pipelines"`
 	Notify     notify.Config       `yaml:"notify"`

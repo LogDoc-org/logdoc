@@ -37,6 +37,16 @@ type Selection = { kind: "node"; app: string } | { kind: "edge"; src: string; ds
 
 type ApiDeploy = { app: string; version: string; ts: string };
 
+// Catalog entry: the declared half of the service card (GET /api/v1/catalog).
+type ApiMeta = {
+  app: string;
+  owner?: string;
+  description?: string;
+  links?: Record<string, string>;
+  tags?: string[];
+  source?: "config" | "api";
+};
+
 // GET /api/v1/topology/diff — "what changed" vs the previous window.
 type ApiDiff = {
   new_services: { app: string; first_seen: string }[];
@@ -57,11 +67,35 @@ function apiKeyParam(): string {
   return key ? `&api_key=${encodeURIComponent(key)}` : "";
 }
 
+function authHeaders(): Record<string, string> {
+  const key = localStorage.getItem("logdoc_api_key");
+  return key ? { "X-API-Key": key } : {};
+}
+
+// parseLinks turns "name url" lines into a links map.
+function parseLinks(text: string): { links: Record<string, string>; error?: string } {
+  const links: Record<string, string> = {};
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const sp = line.indexOf(" ");
+    if (sp <= 0) return { links, error: `link "${line}": want "name url"` };
+    links[line.slice(0, sp).trim()] = line.slice(sp + 1).trim();
+  }
+  return { links };
+}
+
 function nodeRadius(n: SimNode): number {
   return Math.min(7 + Math.sqrt(n.degree) * 0.8 + Math.log10(1 + n.count) * 0.6, 16);
 }
 
-export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tail: boolean) => void }) {
+export default function Topology({
+  onOpenLogs,
+  canEdit = false,
+}: {
+  onOpenLogs: (app: string, tail: boolean) => void;
+  canEdit?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const nodesRef = useRef<Map<string, SimNode>>(new Map());
   const edgesRef = useRef<ApiEdge[]>([]);
@@ -73,6 +107,15 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
 
   const [selection, setSelection] = useState<Selection>(null);
   const [deploys, setDeploys] = useState<ApiDeploy[]>([]);
+  const [catalog, setCatalog] = useState<Record<string, ApiMeta>>({});
+  // Edit form state; null = not editing.
+  const [metaForm, setMetaForm] = useState<{
+    owner: string;
+    description: string;
+    links: string;
+    tags: string;
+    error?: string;
+  } | null>(null);
   const [showChanges, setShowChanges] = useState(false);
   const [diff, setDiff] = useState<ApiDiff | null>(null);
   const [win, setWin] = useState("5m");
@@ -128,8 +171,23 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
     return () => clearInterval(iv);
   }, [load]);
 
+  // Catalog metadata for the service cards.
+  const loadCatalog = useCallback(() => {
+    fetch(`/api/v1/catalog?${apiKeyParam().slice(1)}`)
+      .then((res) => (res.ok ? res.json() : { services: [] }))
+      .then((data: { services: ApiMeta[] }) => {
+        const map: Record<string, ApiMeta> = {};
+        for (const m of data.services) map[m.app] = m;
+        setCatalog(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(loadCatalog, [loadCatalog]);
+
   // Deploy markers for the selected service (last 24h).
   useEffect(() => {
+    setMetaForm(null); // selecting another node closes the edit form
     if (selection?.kind !== "node") {
       setDeploys([]);
       return;
@@ -508,6 +566,54 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
   const nodeEdges = selNode
     ? edgesRef.current.filter((e) => e.src === selNode.app || e.dst === selNode.app)
     : [];
+  const selMeta = selNode ? catalog[selNode.app] : undefined;
+
+  const openMetaForm = () => {
+    setMetaForm({
+      owner: selMeta?.owner ?? "",
+      description: selMeta?.description ?? "",
+      links: Object.entries(selMeta?.links ?? {})
+        .map(([name, url]) => `${name} ${url}`)
+        .join("\n"),
+      tags: (selMeta?.tags ?? []).join(", "),
+    });
+  };
+
+  const saveMeta = async () => {
+    if (!selNode || !metaForm) return;
+    const { links, error: linkErr } = parseLinks(metaForm.links);
+    if (linkErr) {
+      setMetaForm({ ...metaForm, error: linkErr });
+      return;
+    }
+    const tags = metaForm.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const body = {
+      owner: metaForm.owner.trim(),
+      description: metaForm.description.trim(),
+      links,
+      tags,
+    };
+    const empty = !body.owner && !body.description && !Object.keys(links).length && !tags.length;
+    try {
+      const res = await fetch(`/api/v1/catalog/${encodeURIComponent(selNode.app)}`, {
+        method: empty ? "DELETE" : "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: empty ? undefined : JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setMetaForm({ ...metaForm, error: data?.error ?? `HTTP ${res.status}` });
+        return;
+      }
+      setMetaForm(null);
+      loadCatalog();
+    } catch (e) {
+      setMetaForm({ ...metaForm, error: String(e) });
+    }
+  };
 
   return (
     <div className="topo">
@@ -666,6 +772,57 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
         {selNode && (
           <div className="topo-panel">
             <div className="topo-title">{selNode.app}</div>
+            {!metaForm && (selMeta?.description || selMeta?.tags?.length) && (
+              <div className="topo-meta">
+                {selMeta.description && <div className="topo-desc">{selMeta.description}</div>}
+                {(selMeta.tags?.length ?? 0) > 0 && (
+                  <div className="topo-tags">
+                    {selMeta.tags!.map((t) => (
+                      <span key={t} className="topo-tag">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {!metaForm && selMeta?.owner && (
+              <div className="kv">
+                <span>owner</span>
+                <b>{selMeta.owner}</b>
+              </div>
+            )}
+            {metaForm && (
+              <div className="topo-meta-form">
+                <input
+                  placeholder="owner (team or person)"
+                  value={metaForm.owner}
+                  onChange={(e) => setMetaForm({ ...metaForm, owner: e.target.value })}
+                />
+                <textarea
+                  placeholder="description"
+                  rows={2}
+                  value={metaForm.description}
+                  onChange={(e) => setMetaForm({ ...metaForm, description: e.target.value })}
+                />
+                <textarea
+                  placeholder={"links, one per line:\nrepo https://github.com/org/app"}
+                  rows={3}
+                  value={metaForm.links}
+                  onChange={(e) => setMetaForm({ ...metaForm, links: e.target.value })}
+                />
+                <input
+                  placeholder="tags, comma-separated"
+                  value={metaForm.tags}
+                  onChange={(e) => setMetaForm({ ...metaForm, tags: e.target.value })}
+                />
+                {metaForm.error && <div className="bad">{metaForm.error}</div>}
+                <div className="topo-actions">
+                  <button onClick={saveMeta}>Save</button>
+                  <button onClick={() => setMetaForm(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
             <div className="kv">
               <span>entries</span>
               <b>{selNode.count.toLocaleString()}</b>
@@ -682,6 +839,16 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
               <span>last seen</span>
               <b>{new Date(selNode.last_seen).toLocaleString()}</b>
             </div>
+            {!metaForm && Object.keys(selMeta?.links ?? {}).length > 0 && (
+              <div className="topo-meta-links">
+                <div className="muted">links</div>
+                {Object.entries(selMeta!.links!).map(([name, url]) => (
+                  <a key={name} href={url} target="_blank" rel="noreferrer" className="topo-link">
+                    {name}
+                  </a>
+                ))}
+              </div>
+            )}
             {deploys.length > 0 && (
               <div className="topo-deploys">
                 <div className="muted">deploys (24h)</div>
@@ -710,7 +877,13 @@ export default function Topology({ onOpenLogs }: { onOpenLogs: (app: string, tai
             <div className="topo-actions">
               <button onClick={() => onOpenLogs(selNode.app, false)}>Logs</button>
               <button onClick={() => onOpenLogs(selNode.app, true)}>Live tail</button>
+              {canEdit && !metaForm && selMeta?.source !== "config" && (
+                <button onClick={openMetaForm}>Edit</button>
+              )}
             </div>
+            {selMeta?.source === "config" && (
+              <div className="muted topo-meta-note">defined in logdoc.yml</div>
+            )}
           </div>
         )}
 

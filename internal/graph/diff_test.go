@@ -15,9 +15,14 @@ type diffStore struct {
 }
 
 func (s *diffStore) UpsertGraph(context.Context, []NodeAgg, []EdgeAgg) error { return nil }
-func (s *diffStore) Topology(context.Context, string) (Topology, error)     { return s.topo, nil }
-func (s *diffStore) InsertDeploys(context.Context, string, []Deploy) error  { return nil }
-func (s *diffStore) Close() error                                           { return nil }
+func (s *diffStore) Topology(context.Context, string) (Topology, error)      { return s.topo, nil }
+func (s *diffStore) InsertDeploys(context.Context, string, []Deploy) error   { return nil }
+func (s *diffStore) UpsertMeta(context.Context, string, ServiceMeta) error   { return nil }
+func (s *diffStore) DeleteMeta(context.Context, string, string) error        { return nil }
+func (s *diffStore) CatalogMeta(context.Context, string) ([]ServiceMeta, error) {
+	return nil, nil
+}
+func (s *diffStore) Close() error { return nil }
 
 func (s *diffStore) Deploys(_ context.Context, _, app string, since time.Time, _ int) ([]Deploy, error) {
 	var out []Deploy
@@ -49,9 +54,9 @@ func (m *diffMetrics) EdgeRatesRange(_ context.Context, _ string, from, _ time.T
 
 func TestDiff(t *testing.T) {
 	now := time.Now()
-	in := now.Add(-30 * time.Minute)       // inside the 1h window
-	before := now.Add(-90 * time.Minute)   // inside the previous window
-	ancient := now.Add(-10 * time.Hour)    // older than both
+	in := now.Add(-30 * time.Minute)     // inside the 1h window
+	before := now.Add(-90 * time.Minute) // inside the previous window
+	ancient := now.Add(-10 * time.Hour)  // older than both
 
 	key := func(src, dst string) EdgeKey {
 		return EdgeKey{TenantID: model.DefaultTenant, Src: src, Dst: dst}
@@ -60,13 +65,13 @@ func TestDiff(t *testing.T) {
 	store := &diffStore{
 		topo: Topology{
 			Nodes: []Node{
-				{App: "fresh", FirstSeen: in, LastSeen: in},           // new
-				{App: "gone", FirstSeen: ancient, LastSeen: before},   // went silent
-				{App: "steady", FirstSeen: ancient, LastSeen: in},     // unchanged
+				{App: "fresh", FirstSeen: in, LastSeen: in},               // new
+				{App: "gone", FirstSeen: ancient, LastSeen: before},       // went silent
+				{App: "steady", FirstSeen: ancient, LastSeen: in},         // unchanged
 				{App: "long-dead", FirstSeen: ancient, LastSeen: ancient}, // silent long ago — not reported
 			},
 			Edges: []Edge{
-				{Src: "steady", Dst: "fresh", Origin: "inferred", FirstSeen: in, LastSeen: in},   // new
+				{Src: "steady", Dst: "fresh", Origin: "inferred", FirstSeen: in, LastSeen: in},      // new
 				{Src: "steady", Dst: "gone", Origin: "trace", FirstSeen: ancient, LastSeen: before}, // silent
 				{Src: "steady", Dst: "steady2", Origin: "trace", FirstSeen: ancient, LastSeen: in},
 			},

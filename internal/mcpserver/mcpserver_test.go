@@ -75,7 +75,20 @@ func newSession(t *testing.T, backend *fakeBackend) *sdk.ClientSession {
 		t.Fatalf("seed deploys: %v", err)
 	}
 
-	srv := New(backend, nil, graph.NewManager(store, fakeMetrics{}), "test")
+	err = store.UpsertMeta(context.Background(), model.DefaultTenant, graph.ServiceMeta{
+		App:   "billing",
+		Owner: "team-payments",
+		Links: map[string]string{"runbook": "https://wiki.example.com/billing"},
+	})
+	if err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+
+	catalog, err := graph.NewCatalog(store, nil)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	srv := New(backend, nil, graph.NewManager(store, fakeMetrics{}), catalog, "test")
 
 	st, ct := sdk.NewInMemoryTransports()
 	ctx := context.Background()
@@ -238,6 +251,9 @@ func TestGetServiceCard(t *testing.T) {
 	}
 	if len(out.Deploys) != 1 || out.Deploys[0].Version != "2.3.1" {
 		t.Errorf("deploys: %+v", out.Deploys)
+	}
+	if out.Owner != "team-payments" || out.Links["runbook"] != "https://wiki.example.com/billing" {
+		t.Errorf("catalog meta: %+v", out)
 	}
 }
 

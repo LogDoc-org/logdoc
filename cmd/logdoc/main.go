@@ -108,6 +108,11 @@ func run(args []string) error {
 	deploys := graph.NewDeployDetector(graphStore)
 	defer deploys.Close() // flush pending markers before the store closes
 
+	catalog, err := graph.NewCatalog(graphStore, cfg.Catalog)
+	if err != nil {
+		return fmt.Errorf("catalog config: %w", err)
+	}
+
 	hub := tail.NewHub()
 	sink := fanout{batcher, hub, extractor, deploys}
 
@@ -184,6 +189,14 @@ func run(args []string) error {
 		authSvc.Require(auth.RoleMember, graph.NewDiffHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",
 		authSvc.Require(auth.RoleMember, graph.NewDeploysHandler(manager)))
+	// Catalog: members read it, admins edit it; config-declared entries stay
+	// read-only via the API.
+	mux.Handle("GET /api/v1/catalog",
+		authSvc.Require(auth.RoleMember, graph.NewCatalogListHandler(catalog)))
+	for _, m := range []string{"PUT", "DELETE"} {
+		mux.Handle(m+" /api/v1/catalog/{app}",
+			authSvc.Require(auth.RoleAdmin, graph.NewCatalogEditHandler(catalog)))
+	}
 	// Rules: members see them, only admins change them. Registered per method
 	// so the catch-all "GET /" UI route stays valid.
 	mux.Handle("GET /api/v1/notify/rules", authSvc.Require(auth.RoleMember, rulesAPI.Handler()))
@@ -203,7 +216,7 @@ func run(args []string) error {
 	// get_topology_diff, get_service_card). The transport uses GET/POST/DELETE;
 	// each method is registered separately so the catch-all "GET /" UI route
 	// stays valid.
-	mcpSrv := mcpserver.New(store, store, manager, version)
+	mcpSrv := mcpserver.New(store, store, manager, catalog, version)
 	mcpHandler := authSvc.Require(auth.RoleMember, mcpSrv.Handler())
 	for _, m := range []string{"GET", "POST", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)

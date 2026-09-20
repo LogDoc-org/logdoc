@@ -165,6 +165,12 @@ The same over HTTP:
 curl 'localhost:9001/api/v1/topology/diff?window=1h'
 ```
 
+The card also takes the human half of a catalog entry: an admin sets owner,
+description, links (repo, runbook, dashboard) and tags right on the card —
+or declares them in the `catalog:` section of `logdoc.yml` (then they are
+read-only in the UI). Agents get the same fields through MCP, so "who owns
+billing and where is its runbook?" is answerable mid-incident.
+
 Export the current architecture for your docs:
 
 ```bash

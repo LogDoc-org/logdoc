@@ -218,6 +218,47 @@ func TestDeploysInsertAndDedup(t *testing.T) {
 	}
 }
 
+func TestCatalogCRUD(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	meta := graph.ServiceMeta{
+		App: "billing", Owner: "team-payments", Description: "charges cards",
+		Links: map[string]string{"repo": "https://github.com/x/y"},
+		Tags:  []string{"critical"},
+	}
+	if err := s.UpsertMeta(ctx, "default", meta); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	// Replace on second upsert, not merge.
+	meta.Owner = "team-billing"
+	meta.Tags = nil
+	if err := s.UpsertMeta(ctx, "default", meta); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+
+	got, err := s.CatalogMeta(ctx, "default")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(got) != 1 || got[0].Owner != "team-billing" || got[0].Tags != nil ||
+		got[0].Links["repo"] != "https://github.com/x/y" {
+		t.Fatalf("stored meta: %+v", got)
+	}
+
+	// Tenant scoping.
+	if other, _ := s.CatalogMeta(ctx, "other"); len(other) != 0 {
+		t.Errorf("tenant leak: %+v", other)
+	}
+
+	if err := s.DeleteMeta(ctx, "default", "billing"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if got, _ := s.CatalogMeta(ctx, "default"); len(got) != 0 {
+		t.Errorf("after delete: %+v", got)
+	}
+}
+
 func TestDeploysFilters(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

@@ -97,7 +97,7 @@ export default function App() {
           <div style={{ display: view === "logs" ? "block" : "none" }}>
             <LogsView request={logsRequest} />
           </div>
-          {view === "topology" && <Topology onOpenLogs={openLogs} />}
+          {view === "topology" && <Topology onOpenLogs={openLogs} canEdit={admin} />}
           {view === "rules" && <Rules canEdit={admin} />}
           {view === "access" && <Access mode={me.mode} admin={admin} />}
         </>

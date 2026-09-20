@@ -7,6 +7,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -65,7 +66,17 @@ CREATE TABLE IF NOT EXISTS deploys (
 	version   TEXT    NOT NULL,
 	ts        INTEGER NOT NULL -- unix milliseconds
 );
-CREATE INDEX IF NOT EXISTS deploys_app_ts ON deploys (tenant_id, app, ts DESC);`)
+CREATE INDEX IF NOT EXISTS deploys_app_ts ON deploys (tenant_id, app, ts DESC);
+CREATE TABLE IF NOT EXISTS catalog (
+	tenant_id   TEXT    NOT NULL,
+	app         TEXT    NOT NULL,
+	owner       TEXT    NOT NULL DEFAULT '',
+	description TEXT    NOT NULL DEFAULT '',
+	links       TEXT    NOT NULL DEFAULT '{}', -- JSON: name → URL
+	tags        TEXT    NOT NULL DEFAULT '[]', -- JSON array
+	updated_at  INTEGER NOT NULL,              -- unix milliseconds
+	PRIMARY KEY (tenant_id, app)
+);`)
 	if err != nil {
 		return fmt.Errorf("sqlite migrate: %w", err)
 	}
@@ -225,6 +236,87 @@ func (s *Store) Deploys(ctx context.Context, tenantID, app string, since time.Ti
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) UpsertMeta(ctx context.Context, tenantID string, m graph.ServiceMeta) error {
+	links, err := json.Marshal(orEmptyMap(m.Links))
+	if err != nil {
+		return fmt.Errorf("catalog links marshal %s: %w", m.App, err)
+	}
+	tags, err := json.Marshal(orEmptySlice(m.Tags))
+	if err != nil {
+		return fmt.Errorf("catalog tags marshal %s: %w", m.App, err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+INSERT INTO catalog (tenant_id, app, owner, description, links, tags, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (tenant_id, app) DO UPDATE SET
+	owner       = excluded.owner,
+	description = excluded.description,
+	links       = excluded.links,
+	tags        = excluded.tags,
+	updated_at  = excluded.updated_at`,
+		tenantID, m.App, m.Owner, m.Description, string(links), string(tags),
+		time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("catalog upsert %s: %w", m.App, err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteMeta(ctx context.Context, tenantID, app string) error {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM catalog WHERE tenant_id = ? AND app = ?`, tenantID, app); err != nil {
+		return fmt.Errorf("catalog delete %s: %w", app, err)
+	}
+	return nil
+}
+
+func (s *Store) CatalogMeta(ctx context.Context, tenantID string) ([]graph.ServiceMeta, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT app, owner, description, links, tags
+		 FROM catalog WHERE tenant_id = ? ORDER BY app`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("catalog query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []graph.ServiceMeta
+	for rows.Next() {
+		var m graph.ServiceMeta
+		var links, tags string
+		if err := rows.Scan(&m.App, &m.Owner, &m.Description, &links, &tags); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(links), &m.Links); err != nil {
+			return nil, fmt.Errorf("catalog links unmarshal %s: %w", m.App, err)
+		}
+		if err := json.Unmarshal([]byte(tags), &m.Tags); err != nil {
+			return nil, fmt.Errorf("catalog tags unmarshal %s: %w", m.App, err)
+		}
+		if len(m.Links) == 0 {
+			m.Links = nil
+		}
+		if len(m.Tags) == 0 {
+			m.Tags = nil
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// orEmptyMap/orEmptySlice keep stored JSON at {} / [] instead of null.
+func orEmptyMap(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
+}
+
+func orEmptySlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func (s *Store) Close() error {

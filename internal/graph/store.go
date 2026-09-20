@@ -42,6 +42,7 @@ type Store interface {
 	UpsertGraph(ctx context.Context, nodes []NodeAgg, edges []EdgeAgg) error
 	Topology(ctx context.Context, tenantID string) (Topology, error)
 	DeployStore
+	CatalogStore
 	Close() error
 }
 
