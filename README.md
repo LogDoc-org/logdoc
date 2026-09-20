@@ -78,7 +78,10 @@ required — traces only refine the map.
 - API: `GET /api/v1/topology?window=5m` — nodes and edges with windowed
   rates (rps, error rate).
 - Export: `GET /api/v1/topology/export?format=mermaid|markdown` — paste the
-  current architecture straight into your docs.
+  current architecture straight into your docs. `format=backstage` renders
+  the map as Backstage catalog entities (`catalog-info.yaml`): point
+  Backstage's URL reader at the endpoint and its catalog — components,
+  owners, `dependsOn` from real traffic — keeps itself fresh from logs.
 - Deploy markers: version changes detected from the logs themselves (a
   `version` field, or a deploy message) land on the service card next to
   whatever happened right after — "2.3.1 deployed, seconds later the first

@@ -184,7 +184,7 @@ func run(args []string) error {
 	mux.Handle("GET /api/v1/topology",
 		authSvc.Require(auth.RoleMember, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
-		authSvc.Require(auth.RoleMember, graph.NewExportHandler(manager)))
+		authSvc.Require(auth.RoleMember, graph.NewExportHandler(manager, catalog)))
 	mux.Handle("GET /api/v1/topology/diff",
 		authSvc.Require(auth.RoleMember, graph.NewDiffHandler(manager)))
 	mux.Handle("GET /api/v1/deploys",

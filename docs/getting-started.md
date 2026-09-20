@@ -177,6 +177,15 @@ Export the current architecture for your docs:
 curl 'localhost:9001/api/v1/topology/export?format=mermaid'
 ```
 
+Run Backstage? `format=backstage` renders the same map as catalog entities —
+components with owners, links and `dependsOn` edges from real traffic.
+Register the endpoint as a URL location (append `&api_key=<token>` when auth
+is on) and the catalog stops going stale:
+
+```bash
+curl 'localhost:9001/api/v1/topology/export?format=backstage&window=24h'
+```
+
 ## 7. Let an agent in (MCP)
 
 LogDoc is an MCP server — `query_logs`, `get_topology`, `get_topology_diff`,

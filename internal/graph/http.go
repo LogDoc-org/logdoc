@@ -161,16 +161,19 @@ func NewCatalogEditHandler(c *Catalog) http.Handler {
 	})
 }
 
-// NewExportHandler — GET /api/v1/topology/export?format=mermaid|markdown&window=5m
-// Renders the current architecture map as text for docs and diagrams.
-func NewExportHandler(m *Manager) http.Handler {
+// NewExportHandler — GET /api/v1/topology/export?format=mermaid|markdown|backstage&window=5m
+// Renders the current architecture map as text: diagrams for docs, or
+// Backstage catalog entities (point Backstage's URL reader at this endpoint
+// — with ?api_key=<token> when auth is on — and its catalog keeps itself
+// fresh from logs).
+func NewExportHandler(m *Manager, c *Catalog) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		format := r.URL.Query().Get("format")
 		if format == "" {
 			format = "mermaid"
 		}
-		if format != "mermaid" && format != "markdown" {
-			http.Error(w, `{"error":"invalid format (want mermaid or markdown)"}`, http.StatusBadRequest)
+		if format != "mermaid" && format != "markdown" && format != "backstage" {
+			http.Error(w, `{"error":"invalid format (want mermaid, markdown or backstage)"}`, http.StatusBadRequest)
 			return
 		}
 		window, ok := parseWindow(w, r)
@@ -185,10 +188,19 @@ func NewExportHandler(m *Manager) http.Handler {
 		}
 
 		var out string
-		if format == "markdown" {
+		switch format {
+		case "markdown":
 			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 			out = Markdown(topo)
-		} else {
+		case "backstage":
+			metas, err := c.List(r.Context(), model.DefaultTenant)
+			if err != nil {
+				http.Error(w, `{"error":"catalog unavailable"}`, http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+			out = Backstage(topo, metas)
+		default:
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			out = Mermaid(topo)
 		}
