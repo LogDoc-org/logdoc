@@ -10,10 +10,32 @@ type View = "logs" | "topology" | "rules" | "access";
 // Who am I: open (no auth configured), key (bootstrap API key) or user.
 type Me = { mode: "open" | "key" | "user"; login?: string; role: "admin" | "member" };
 
+// The view lives in the URL (/topology, /rules, /access; / = logs), so
+// refresh and back/forward keep the tab. The server serves index.html for
+// every unknown path (spaHandler), no router library needed.
+function pathToView(pathname: string): View {
+  if (pathname.startsWith("/topology")) return "topology";
+  if (pathname.startsWith("/rules")) return "rules";
+  if (pathname.startsWith("/access")) return "access";
+  return "logs";
+}
+
 export default function App() {
-  const [view, setView] = useState<View>("logs");
+  const [view, setViewState] = useState<View>(() => pathToView(location.pathname));
   const [logsRequest, setLogsRequest] = useState<LogsRequest | null>(null);
   const [me, setMe] = useState<Me | null | "anon">(null); // null = checking
+
+  const setView = useCallback((v: View) => {
+    setViewState(v);
+    const path = v === "logs" ? "/" : `/${v}`;
+    if (location.pathname !== path) history.pushState(null, "", path);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => setViewState(pathToView(location.pathname));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const checkAuth = useCallback(async () => {
     try {
@@ -53,7 +75,7 @@ export default function App() {
   const admin = me !== "anon" && me.role === "admin";
 
   return (
-    <div className="wrap">
+    <>
       <header>
         <img src="/logo.svg" alt="LogDoc" className="logo" />
         <nav className="tabs">
@@ -91,17 +113,32 @@ export default function App() {
       </header>
 
       {me === "anon" ? (
-        <Login onDone={checkAuth} />
+        <div className="wrap">
+          <Login onDone={checkAuth} />
+        </div>
       ) : (
         <>
-          <div style={{ display: view === "logs" ? "block" : "none" }}>
+          <div className="wrap" style={{ display: view === "logs" ? "block" : "none" }}>
             <LogsView request={logsRequest} />
           </div>
-          {view === "topology" && <Topology onOpenLogs={openLogs} canEdit={admin} />}
-          {view === "rules" && <Rules canEdit={admin} />}
-          {view === "access" && <Access mode={me.mode} admin={admin} />}
+          {/* The map escapes .wrap: full viewport width, like the demo. */}
+          {view === "topology" && (
+            <div className="topo-full">
+              <Topology onOpenLogs={openLogs} canEdit={admin} />
+            </div>
+          )}
+          {view === "rules" && (
+            <div className="wrap">
+              <Rules canEdit={admin} />
+            </div>
+          )}
+          {view === "access" && (
+            <div className="wrap">
+              <Access mode={me.mode} admin={admin} />
+            </div>
+          )}
         </>
       )}
-    </div>
+    </>
   );
 }
