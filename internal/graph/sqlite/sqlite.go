@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // database/sql driver
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS declared_nodes (
 	tenant_id   TEXT NOT NULL,
 	app         TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
+	grp         TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (tenant_id, app)
 );
 CREATE TABLE IF NOT EXISTS declared_edges (
@@ -93,6 +95,11 @@ CREATE TABLE IF NOT EXISTS catalog (
 );`)
 	if err != nil {
 		return fmt.Errorf("sqlite migrate: %w", err)
+	}
+	// Columns added after the table shipped; "duplicate column" is fine.
+	if _, err := s.db.Exec(`ALTER TABLE declared_nodes ADD COLUMN grp TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("sqlite migrate declared_nodes.grp: %w", err)
 	}
 	return nil
 }
@@ -271,8 +278,8 @@ func (s *Store) ReplaceDeclared(ctx context.Context, tenantID string, g graph.De
 	}
 	for _, n := range g.Nodes {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO declared_nodes (tenant_id, app, description) VALUES (?, ?, ?)`,
-			tenantID, n.App, n.Description); err != nil {
+			`INSERT INTO declared_nodes (tenant_id, app, description, grp) VALUES (?, ?, ?, ?)`,
+			tenantID, n.App, n.Description, n.Group); err != nil {
 			return fmt.Errorf("declared node %s: %w", n.App, err)
 		}
 	}
@@ -290,14 +297,14 @@ func (s *Store) DeclaredGraph(ctx context.Context, tenantID string) (graph.Decla
 	var g graph.DeclaredGraph
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT app, description FROM declared_nodes WHERE tenant_id = ? ORDER BY app`, tenantID)
+		`SELECT app, description, grp FROM declared_nodes WHERE tenant_id = ? ORDER BY app`, tenantID)
 	if err != nil {
 		return g, fmt.Errorf("declared nodes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var n graph.DeclaredNode
-		if err := rows.Scan(&n.App, &n.Description); err != nil {
+		if err := rows.Scan(&n.App, &n.Description, &n.Group); err != nil {
 			return g, err
 		}
 		g.Nodes = append(g.Nodes, n)

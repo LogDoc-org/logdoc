@@ -15,6 +15,11 @@ type Node struct {
 	// DeclaredOnly — the service is promised by the code (declared graph)
 	// but has not logged anything yet.
 	DeclaredOnly bool `json:"declared_only,omitempty"`
+	// Group — domain/namespace from the declared graph; the UI clusters
+	// large maps by it.
+	Group string `json:"group,omitempty"`
+	// Description — from the declared graph (what the service is).
+	Description string `json:"description,omitempty"`
 }
 
 // Edge — the current state of a directed service link.

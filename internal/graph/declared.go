@@ -19,6 +19,9 @@ import (
 type DeclaredNode struct {
 	App         string `json:"app" yaml:"app"`
 	Description string `json:"description,omitempty" yaml:"description"`
+	// Group — domain/namespace/team the service belongs to; the UI
+	// clusters large maps by it.
+	Group string `json:"group,omitempty" yaml:"group"`
 }
 
 // DeclaredEdge — a directed link the code declares.
@@ -47,9 +50,11 @@ type DeclaredStore interface {
 	DeclaredGraph(ctx context.Context, tenantID string) (DeclaredGraph, error)
 }
 
+// Sized for real platforms: a single enterprise ad platform declared ~700
+// nodes on first contact with the feature.
 const (
-	maxDeclaredNodes = 500
-	maxDeclaredEdges = 2000
+	maxDeclaredNodes = 2000
+	maxDeclaredEdges = 10000
 )
 
 // ValidateDeclared bounds the declared graph: it ends up rendered and
@@ -71,6 +76,9 @@ func ValidateDeclared(g DeclaredGraph) error {
 		}
 		if len(n.Description) > 2000 {
 			return fmt.Errorf("node %q: description is too long (max 2000)", n.App)
+		}
+		if len(n.Group) > 100 {
+			return fmt.Errorf("node %q: group is too long (max 100)", n.App)
 		}
 		if apps[n.App] {
 			return fmt.Errorf("node %q: duplicate", n.App)
@@ -108,15 +116,20 @@ func ValidateDeclared(g DeclaredGraph) error {
 // code promises them; declared-only nodes/edges are appended with zero
 // counters and origin "declared".
 func mergeDeclared(topo Topology, decl DeclaredGraph) Topology {
-	nodeSeen := make(map[string]bool, len(topo.Nodes))
-	for _, n := range topo.Nodes {
-		nodeSeen[n.App] = true
+	nodeIdx := make(map[string]int, len(topo.Nodes))
+	for i, n := range topo.Nodes {
+		nodeIdx[n.App] = i
 	}
 	for _, dn := range decl.Nodes {
-		if !nodeSeen[dn.App] {
-			nodeSeen[dn.App] = true
-			topo.Nodes = append(topo.Nodes, Node{App: dn.App, DeclaredOnly: true})
+		if i, ok := nodeIdx[dn.App]; ok {
+			topo.Nodes[i].Group = dn.Group
+			topo.Nodes[i].Description = dn.Description
+			continue
 		}
+		nodeIdx[dn.App] = len(topo.Nodes)
+		topo.Nodes = append(topo.Nodes, Node{
+			App: dn.App, DeclaredOnly: true, Group: dn.Group, Description: dn.Description,
+		})
 	}
 
 	edgeIdx := make(map[EdgeKey]int, len(topo.Edges))
@@ -140,8 +153,8 @@ func mergeDeclared(topo Topology, decl DeclaredGraph) Topology {
 		})
 		// A declared edge may reference services nobody listed as nodes.
 		for _, app := range []string{de.Src, de.Dst} {
-			if !nodeSeen[app] {
-				nodeSeen[app] = true
+			if _, ok := nodeIdx[app]; !ok {
+				nodeIdx[app] = len(topo.Nodes)
 				topo.Nodes = append(topo.Nodes, Node{App: app, DeclaredOnly: true})
 			}
 		}
