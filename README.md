@@ -74,7 +74,29 @@ LogDoc builds a live service map from the logs themselves: shared
 required — traces only refine the map.
 
 - UI: the **Topology** tab — force-directed map, click a service or an edge
-  to see its details and jump to its logs.
+  to see its details and jump to its logs. Four ways to look at the same
+  system: **Domains** (business stages as bubbles — name groups
+  `"1 · storefront"`, `"2 · checkout"`… and they lay out as a pipeline),
+  **Board** (swimlane columns of service chips), **All nodes**, and
+  **Focus** (the ego-graph of one service).
+
+![Business domains laid out as a pipeline](docs/img/topology-domains.png)
+
+- Impact analysis: every service card has an **Impact** tab — the downtime
+  blast radius, computed from the graph with transport semantics. Sync
+  callers (http/grpc/sql) fail immediately and the failure walks up the
+  call chain; kafka consumers just go stale. While the tab is open the
+  blast radius is painted on the map: red rings fail, amber goes stale,
+  blue is what the service itself needs. Works for infrastructure too —
+  click a database and see exactly who dies with it.
+
+![Downtime blast radius of a payment gateway](docs/img/topology-impact.png)
+
+- Edge cards: click a link and get the human story — what flows here and
+  why (composed from transport semantics plus the declared evidence), the
+  origin (`declared` / `observed` / both), and windowed traffic.
+
+![An edge card: what flows over this link and why](docs/img/topology-edge.png)
 - API: `GET /api/v1/topology?window=5m` — nodes and edges with windowed
   rates (rps, error rate).
 - Export: `GET /api/v1/topology/export?format=mermaid|markdown` — paste the
@@ -99,6 +121,22 @@ required — traces only refine the map.
   `PUT /api/v1/topology/declared`. Declared links show dashed until real
   traffic confirms them; the map is complete before the first log line,
   and declared-vs-observed disagreement is drift your docs never show.
+- Grouping planes & outage simulation: besides the business domain
+  (`group`), nodes carry `labels` — extra planes like `dc`, `country`,
+  `provider` (multi-values joined with `/`, e.g. `dc: "eu-1/eu-2"`). The
+  map re-clusters by any plane, and one click simulates a whole plane
+  value going down: services that lived only there go dark, multi-homed
+  ones degrade, and failure cascades up synchronous call chains — the
+  "what if this DC dies" answer in one screenshot.
+
+![Simulating a datacenter outage: dead, cascading and degraded services](docs/img/topology-outage.png)
+- Project files: the whole mapped system (declared graph + catalog +
+  title) exports as one portable JSON (`GET/POST /api/v1/topology/project`)
+  — keep several projects as files and switch between them.
+- Shareable snapshot: `GET /api/v1/topology/snapshot` renders a single
+  self-contained HTML viewer — the interactive topology (all views,
+  search, impact analysis) for someone with no LogDoc access; data and
+  code are packed, no server needed.
 
 ## MCP: the agent interface
 

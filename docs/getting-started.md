@@ -205,6 +205,24 @@ code and calls `declare_topology` with services, links, transports and
 `file:line` evidence. Declared links render dashed until real traffic
 confirms them, so the map is complete before the first log line.
 
+Conventions that make a declaration first-class on the map:
+
+- `node.group` — the business domain/stage. Numbered stage names
+  (`"1 · campaigns"`, `"2 · serving"`, …) lay out left-to-right as a
+  pipeline. Infra uses the reserved groups `databases`, `kafka topics`,
+  `kafka clusters`, `redis`, `clickhouse`.
+- `node.labels` — extra grouping planes: `{"dc": "DM/XS"}` and the like
+  (`/` joins multiple values). The UI re-clusters by any label key and
+  simulates a plane value going down (a DC outage: what dies, what
+  degrades, what cascades).
+- `node.description` — the business function: what it does, what it reads
+  and writes, why it exists. It becomes the service card.
+- kafka edges always point service→topic — for producers and consumers
+  alike; the evidence text says which one it is.
+- `edge.evidence` — doubles as the edge card's human "what flows here and
+  why" (up to 2000 bytes): a business sentence plus the `file:line` or ADR
+  reference.
+
 ## 8. Alerts
 
 Two rule kinds evaluated on the live stream: an error burst and a service
