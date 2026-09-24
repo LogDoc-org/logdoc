@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS catalog (
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("sqlite migrate declared_nodes.grp: %w", err)
 	}
+	if _, err := s.db.Exec(`ALTER TABLE declared_nodes ADD COLUMN labels TEXT NOT NULL DEFAULT '{}'`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("sqlite migrate declared_nodes.labels: %w", err)
+	}
 	return nil
 }
 
@@ -277,9 +281,15 @@ func (s *Store) ReplaceDeclared(ctx context.Context, tenantID string, g graph.De
 		}
 	}
 	for _, n := range g.Nodes {
+		labels := "{}"
+		if len(n.Labels) > 0 {
+			if b, jerr := json.Marshal(n.Labels); jerr == nil {
+				labels = string(b)
+			}
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO declared_nodes (tenant_id, app, description, grp) VALUES (?, ?, ?, ?)`,
-			tenantID, n.App, n.Description, n.Group); err != nil {
+			`INSERT INTO declared_nodes (tenant_id, app, description, grp, labels) VALUES (?, ?, ?, ?, ?)`,
+			tenantID, n.App, n.Description, n.Group, labels); err != nil {
 			return fmt.Errorf("declared node %s: %w", n.App, err)
 		}
 	}
@@ -297,15 +307,19 @@ func (s *Store) DeclaredGraph(ctx context.Context, tenantID string) (graph.Decla
 	var g graph.DeclaredGraph
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT app, description, grp FROM declared_nodes WHERE tenant_id = ? ORDER BY app`, tenantID)
+		`SELECT app, description, grp, labels FROM declared_nodes WHERE tenant_id = ? ORDER BY app`, tenantID)
 	if err != nil {
 		return g, fmt.Errorf("declared nodes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var n graph.DeclaredNode
-		if err := rows.Scan(&n.App, &n.Description, &n.Group); err != nil {
+		var labels string
+		if err := rows.Scan(&n.App, &n.Description, &n.Group, &labels); err != nil {
 			return g, err
+		}
+		if labels != "" && labels != "{}" {
+			_ = json.Unmarshal([]byte(labels), &n.Labels)
 		}
 		g.Nodes = append(g.Nodes, n)
 	}

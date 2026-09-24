@@ -134,7 +134,9 @@ func NewDeclaredHandler(m *Manager) http.Handler {
 		}
 
 		var g DeclaredGraph
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&g); err != nil {
+		// 16MB: a few thousand nodes with rich descriptions and per-edge
+		// business evidence outgrow 1MB easily.
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<20)).Decode(&g); err != nil {
 			http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
 			return
 		}

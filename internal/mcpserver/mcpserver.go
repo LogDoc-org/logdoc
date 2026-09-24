@@ -69,11 +69,22 @@ func New(backend query.Backend, stats query.StatsSink, manager *graph.Manager, c
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name: "declare_topology",
 		Description: "Declare the architecture found by analyzing the source code: services " +
-			"(nodes) and directed links (edges) with a transport (http, sql, s3, smtp, ...) " +
-			"and an evidence reference (file:line). REPLACES the previous declaration " +
+			"(nodes) and directed links (edges). REPLACES the previous declaration " +
 			"entirely, so always send the complete graph. Declared links appear on the map " +
 			"immediately (dashed until confirmed by real traffic); disagreement between the " +
-			"declared and observed graph is architecture drift.",
+			"declared and observed graph is architecture drift. Conventions: " +
+			"(1) node.group = business domain/stage; name pipeline stages \"1 · stage\", " +
+			"\"2 · stage\"… and the UI lays them out left-to-right; infra nodes use groups " +
+			"databases, kafka topics, kafka clusters, redis, clickhouse. " +
+			"(2) node.labels = extra grouping planes beyond the domain (dc, country, " +
+			"provider…), multi-values joined with \"/\" (dc: \"DM/XS\") — the UI re-clusters " +
+			"by any label key and can simulate a whole plane value going down (DC outage). " +
+			"(3) kafka edges ALWAYS point service→topic, for producers and consumers alike. " +
+			"(4) edge.evidence doubles as the human 'what flows here and why' text on the " +
+			"edge card (up to 2000 bytes) — write a business explanation plus the file:line " +
+			"or ADR reference. " +
+			"(5) node.description should say the BUSINESS function: what it does, what it " +
+			"reads/writes, why it exists — not just a tech label.",
 	}, s.declareTopology)
 
 	return s
@@ -226,8 +237,8 @@ func (s *Server) getTopologyDiff(ctx context.Context, _ *sdk.CallToolRequest, ar
 // --- declare_topology ---
 
 type declareTopologyArgs struct {
-	Nodes []graph.DeclaredNode `json:"nodes" jsonschema:"services the code declares: app (required) and an optional description"`
-	Edges []graph.DeclaredEdge `json:"edges" jsonschema:"directed links: src, dst, optional transport (http, sql, s3, smtp, ...) and evidence (file:line)"`
+	Nodes []graph.DeclaredNode `json:"nodes" jsonschema:"services the code declares: app (required), description (business function), group (domain/stage), labels (extra planes: dc, country, provider; '/' joins multi-values)"`
+	Edges []graph.DeclaredEdge `json:"edges" jsonschema:"directed links: src, dst, optional transport (http, grpc, sql, redis, kafka, ...) and evidence (business 'what & why' + file:line; kafka edges point service→topic)"`
 }
 
 type declareTopologyResult struct {

@@ -569,6 +569,45 @@ a.winbtn { text-decoration: none; }
 .kv b { font-weight: 600; font-family: var(--mono); }
 .kv b.bad { color: #f53e3e; }
 .topo-links { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+/* Card sections: a thin rule + small caps title keeps the blob apart. */
+.topo-sec { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.topo-sec-title {
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 10px;
+  margin: 4px 0 3px;
+}
+.topo-warn { font-family: var(--mono); font-size: 11px; color: var(--accent); margin: 2px 0 4px; }
+/* Node card tabs: Info | Impact */
+.card-tabs { display: flex; gap: 4px; margin: 2px 0 8px; }
+.card-tabs button {
+  flex: 1;
+  font-size: 11px;
+  padding: 3px 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.card-tabs button.on { border-color: var(--accent); color: var(--accent); }
+/* Active outage-simulation button: alarm red, not accent orange. */
+.winbtn.sim-on { border-color: #f53e3e !important; color: #f53e3e !important; }
+.topo-impact-note { font-size: 11px; margin: 1px 0 4px; line-height: 1.45; }
+.topo-evidence {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 6px;
+  padding: 6px 9px;
+  word-break: break-word;
+}
+.topo-dep { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.topo-dep-name { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.topo-dep-meta { flex-shrink: 0; font-size: 11px; }
 .topo-deploys { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
 .topo-deploys > .muted { font-size: 11px; margin-bottom: 2px; }
 .topo-deploys .kv span.accent { color: var(--accent); font-family: var(--mono); }
@@ -582,6 +621,39 @@ a.winbtn { text-decoration: none; }
 .topo-link:hover { color: var(--accent); }
 .topo-actions { display: flex; gap: 6px; margin-top: 10px; }
 .topo-actions button { flex: 1; padding: 5px 0; font-size: 12px; }
+
+/* --- snapshot viewer (shared HTML export) --- */
+.viewer-proj {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+}
+.viewer-promo {
+  margin-left: auto;
+  font-size: 12px;
+  text-decoration: none;
+  color: var(--muted);
+  transition: color 0.3s;
+}
+.viewer-promo:hover { color: var(--accent); }
+.viewer-badge {
+  position: fixed;
+  left: 16px;
+  bottom: 14px;
+  z-index: 90;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: none;
+  background: rgba(22, 21, 26, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  transition: color 0.3s, border-color 0.3s;
+}
+.viewer-badge:hover { color: var(--accent); border-color: var(--accent); }
 
 /* --- service catalog on the card --- */
 .topo-meta { margin-bottom: 6px; }

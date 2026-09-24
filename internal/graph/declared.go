@@ -22,6 +22,11 @@ type DeclaredNode struct {
 	// Group — domain/namespace/team the service belongs to; the UI
 	// clusters large maps by it.
 	Group string `json:"group,omitempty" yaml:"group"`
+	// Labels — extra grouping planes beyond the business domain: dc,
+	// country, provider, tier... The UI can re-cluster the map by any
+	// label key and simulate a whole plane value going down (e.g. a DC
+	// outage). Multi-valued labels join values with "/": dc: "DM/XS".
+	Labels map[string]string `json:"labels,omitempty" yaml:"labels"`
 }
 
 // DeclaredEdge — a directed link the code declares.
@@ -80,6 +85,14 @@ func ValidateDeclared(g DeclaredGraph) error {
 		if len(n.Group) > 100 {
 			return fmt.Errorf("node %q: group is too long (max 100)", n.App)
 		}
+		if len(n.Labels) > 8 {
+			return fmt.Errorf("node %q: too many labels (max 8)", n.App)
+		}
+		for k, v := range n.Labels {
+			if strings.TrimSpace(k) == "" || len(k) > 32 || len(v) > 200 {
+				return fmt.Errorf("node %q: label %q: key ≤32, value ≤200, non-empty key", n.App, k)
+			}
+		}
 		if apps[n.App] {
 			return fmt.Errorf("node %q: duplicate", n.App)
 		}
@@ -99,8 +112,10 @@ func ValidateDeclared(g DeclaredGraph) error {
 		if len(e.Transport) > 50 {
 			return fmt.Errorf("edge %s→%s: transport is too long (max 50)", e.Src, e.Dst)
 		}
-		if len(e.Evidence) > 500 {
-			return fmt.Errorf("edge %s→%s: evidence is too long (max 500)", e.Src, e.Dst)
+		// 2000 like node descriptions: evidence doubles as the edge's
+		// human "what & why" text, which non-ASCII scripts inflate.
+		if len(e.Evidence) > 2000 {
+			return fmt.Errorf("edge %s→%s: evidence is too long (max 2000)", e.Src, e.Dst)
 		}
 		k := EdgeKey{Src: e.Src, Dst: e.Dst}
 		if seen[k] {
@@ -124,11 +139,13 @@ func mergeDeclared(topo Topology, decl DeclaredGraph) Topology {
 		if i, ok := nodeIdx[dn.App]; ok {
 			topo.Nodes[i].Group = dn.Group
 			topo.Nodes[i].Description = dn.Description
+			topo.Nodes[i].Labels = dn.Labels
 			continue
 		}
 		nodeIdx[dn.App] = len(topo.Nodes)
 		topo.Nodes = append(topo.Nodes, Node{
 			App: dn.App, DeclaredOnly: true, Group: dn.Group, Description: dn.Description,
+			Labels: dn.Labels,
 		})
 	}
 

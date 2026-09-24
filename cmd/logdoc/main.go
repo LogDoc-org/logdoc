@@ -26,6 +26,7 @@ import (
 	"github.com/LogDoc-org/logdoc/internal/plugins"
 	"github.com/LogDoc-org/logdoc/internal/query"
 	"github.com/LogDoc-org/logdoc/internal/selflog"
+	"github.com/LogDoc-org/logdoc/internal/snapshot"
 	"github.com/LogDoc-org/logdoc/internal/storage"
 	"github.com/LogDoc-org/logdoc/internal/storage/clickhouse"
 	"github.com/LogDoc-org/logdoc/internal/tail"
@@ -170,6 +171,11 @@ func run(args []string) error {
 	logger = slog.New(selflog.New(logger.Handler(), selfSink{batcher, hub, extractor}))
 	slog.SetDefault(logger)
 
+	uiFS, err := fs.Sub(ui.Dist, "dist")
+	if err != nil {
+		return fmt.Errorf("ui embed: %w", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -185,6 +191,8 @@ func run(args []string) error {
 		authSvc.Require(auth.RoleMember, graph.NewHTTPHandler(manager)))
 	mux.Handle("GET /api/v1/topology/export",
 		authSvc.Require(auth.RoleMember, graph.NewExportHandler(manager, catalog)))
+	mux.Handle("GET /api/v1/topology/snapshot",
+		authSvc.Require(auth.RoleMember, snapshot.NewHandler(manager, catalog, uiFS)))
 	mux.Handle("GET /api/v1/topology/diff",
 		authSvc.Require(auth.RoleMember, graph.NewDiffHandler(manager)))
 	// Declared graph: what the code promises. Members read, admins replace
@@ -193,6 +201,12 @@ func run(args []string) error {
 		authSvc.Require(auth.RoleMember, graph.NewDeclaredHandler(manager)))
 	mux.Handle("PUT /api/v1/topology/declared",
 		authSvc.Require(auth.RoleAdmin, graph.NewDeclaredHandler(manager)))
+	// Project file: the whole mapped system (declared graph + catalog +
+	// title) as one portable JSON — export for members, import for admins.
+	mux.Handle("GET /api/v1/topology/project",
+		authSvc.Require(auth.RoleMember, graph.NewProjectHandler(manager, catalog)))
+	mux.Handle("POST /api/v1/topology/project",
+		authSvc.Require(auth.RoleAdmin, graph.NewProjectHandler(manager, catalog)))
 	mux.Handle("GET /api/v1/deploys",
 		authSvc.Require(auth.RoleMember, graph.NewDeploysHandler(manager)))
 	// Catalog: members read it, admins edit it; config-declared entries stay
@@ -228,10 +242,6 @@ func run(args []string) error {
 		mux.Handle(m+" /mcp", mcpHandler)
 	}
 
-	uiFS, err := fs.Sub(ui.Dist, "dist")
-	if err != nil {
-		return fmt.Errorf("ui embed: %w", err)
-	}
 	mux.Handle("GET /", spaHandler(uiFS))
 
 	native, err := ingest.StartNative(stream, cfg.Ingest.Native.TCPAddr, cfg.Ingest.Native.UDPAddr)

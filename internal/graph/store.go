@@ -20,6 +20,9 @@ type Node struct {
 	Group string `json:"group,omitempty"`
 	// Description — from the declared graph (what the service is).
 	Description string `json:"description,omitempty"`
+	// Labels — extra grouping planes from the declared graph (dc,
+	// country, provider...); "/" joins multiple values.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // Edge — the current state of a directed service link.

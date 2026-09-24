@@ -7,6 +7,13 @@ import Login from "./Login";
 
 type View = "logs" | "topology" | "rules" | "access";
 
+// Snapshot viewer: the shared HTML export carries its data in __SNAP__.
+// The page shows ONLY the topology — no logs, no rules, no auth.
+const SNAP =
+  typeof window !== "undefined"
+    ? (window as unknown as { __SNAP__?: { title?: string } }).__SNAP__
+    : undefined;
+
 // Who am I: open (no auth configured), key (bootstrap API key) or user.
 type Me = { mode: "open" | "key" | "user"; login?: string; role: "admin" | "member" };
 
@@ -14,6 +21,9 @@ type Me = { mode: "open" | "key" | "user"; login?: string; role: "admin" | "memb
 // refresh and back/forward keep the tab. The server serves index.html for
 // every unknown path (spaHandler), no router library needed.
 function pathToView(pathname: string): View {
+  // Snapshot files (file://) carry the view in the hash instead of the path.
+  const h = location.hash.slice(1);
+  if (h === "topology" || h === "rules" || h === "access" || h === "logs") return h;
   if (pathname.startsWith("/topology")) return "topology";
   if (pathname.startsWith("/rules")) return "rules";
   if (pathname.startsWith("/access")) return "access";
@@ -69,6 +79,39 @@ export default function App() {
     setLogsRequest((prev) => ({ app, tail, id: (prev?.id ?? 0) + 1 }));
     setView("logs");
   }, []);
+
+  if (SNAP) {
+    return (
+      <>
+        <header>
+          <img src="/logo.svg" alt="LogDoc" className="logo" />
+          <nav className="tabs">
+            <button className="tab on">Topology</button>
+          </nav>
+          {SNAP.title && <span className="viewer-proj">{SNAP.title}</span>}
+          <a
+            className="muted viewer-promo"
+            href="https://logdoc.org?utm_source=snapshot"
+            target="_blank"
+            rel="noreferrer"
+          >
+            built with LogDoc → logdoc.org
+          </a>
+        </header>
+        <div className="topo-full">
+          <Topology onOpenLogs={() => {}} canEdit={false} />
+        </div>
+        <a
+          className="viewer-badge"
+          href="https://logdoc.org?utm_source=snapshot"
+          target="_blank"
+          rel="noreferrer"
+        >
+          ⚡ A living map of your services — from logs, traces, traffic &amp; repos · LogDoc
+        </a>
+      </>
+    );
+  }
 
   if (me === null) return <div className="wrap muted">loading…</div>;
 
